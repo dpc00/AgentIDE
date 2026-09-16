@@ -53,47 +53,64 @@ When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
   replacing whatever you were looking at.
 - `selection_debounce_ms` — debounce for `selection_changed` notifications.
 
-### Layout Configuration
+### Side-group split & restore
 
-The `layout` section provides control over window layout behavior. Layout restoration is now implemented to fix the issue where AgentIDE permanently disrupted user window layouts.
+`side_group()` splits the window once, the first time AgentIDE needs a
+right-hand pane; without these settings that split stayed forever, even
+after every diff/file AgentIDE opened was closed. All of these are
+top-level keys in `AgentIDE.sublime-settings`, alongside the settings
+above — not nested under a separate object.
 
-**Implemented Settings:**
-- `layout.restore_on_close` — restore original window layout after AgentIDE operations (default: true)
-- `layout.restore_timing` — when to restore: "always", "when_empty", "manual", "never" (default: "when_empty")
-- `layout.split_position` — where to split: "right", "left", "bottom", "top" (default: "right")
-- `layout.split_size` — split size as percentage 0.1-0.9 (default: 0.45)
-- `layout.split_orientation` — split orientation: "vertical", "horizontal" (default: "vertical")
-- `layout.use_new_window` — create new window instead of splitting existing (default: false)
-- `layout.preserve_manual_changes` — respect user manual layout changes made during AgentIDE session (default: false)
-- `layout.validate_on_restore` — validate layout before restoring (default: true)
-- `layout.fallback_layout` — fallback layout if validation fails (default: null)
-- `layout.backup_layouts` — create backups before modification (default: true)
-- `layout.max_backup_versions` — maximum backup versions (default: 5)
-- `layout.restore_delay` — delay before restore in milliseconds (default: 0)
-- `layout.error_handling` — how to handle errors: "ignore", "warn", "error", "fallback" (default: "warn")
-- `layout.min_window_size` — minimum window size for split (default: 400)
-- `layout.max_window_size` — maximum window size for split (default: null)
-- `layout.adaptive_layouts` — adjust split size based on screen size (default: true)
-- `layout.focus_behavior` — focus behavior: "new_content", "keep_current", "alternate" (default: "new_content")
-- `layout.cleanup_on_exit` — cleanup on plugin unload (default: true)
-- `layout.layout_gc_hours` — garbage collection interval in hours (default: 24)
+- `restore_on_close` — save the window's layout before the first split,
+  and restore it once AgentIDE no longer needs the side group (default: true).
+- `restore_timing` — when to restore: `"always"` (as soon as a diff/file
+  closes), `"when_empty"` (once no AgentIDE-opened content remains open,
+  including other still-open diffs), `"manual"` (only via the
+  **AgentIDE: Restore Layout** command), `"never"` (default: `"when_empty"`).
+- `split_position` — `"right"`, `"left"`, `"bottom"`, `"top"` (default: `"right"`).
+- `split_size` — split size as a fraction of the window, 0.1–0.9 (default: 0.45).
+- `split_orientation` — `"vertical"` or `"horizontal"` (default: `"vertical"`).
+- `min_window_size` / `max_window_size` — skip the split if the window's
+  viewport (layout px) is narrower/wider than these; `max_window_size: null`
+  disables the upper check (defaults: 400 / null).
+- `adaptive_layouts` — shrink the split below `split_size` on narrow
+  windows and grow it above `split_size` on wide ones (default: true).
+- `preserve_manual_changes` — skip the automatic restore if you've changed
+  the window's layout yourself since the split, rather than overwrite it
+  (default: false).
+- `restore_delay` — delay before an automatic restore, in milliseconds
+  (default: 0).
+- `backup_layouts` / `max_backup_versions` — keep a short timestamped
+  history of layouts, so a restore still has something to fall back to if
+  Sublime reloaded the plugin and lost the in-memory saved layout (defaults:
+  true / 5).
+- `layout_gc_hours` — drop saved layouts/backups older than this many
+  hours, covering a window whose diff/file was never closed (e.g. the CLI
+  disconnected); `0` disables it (default: 24).
+- `cleanup_on_exit` — also drop entries for windows that no longer exist,
+  on plugin unload and via **AgentIDE: Cleanup Layouts** (default: true).
+- `error_handling` — if `window.set_layout()` itself raises while
+  restoring: `"warn"` (status bar message), `"error"` (modal dialog),
+  `"ignore"`, or `"fallback"` (apply `fallback_layout`, then give up
+  silently) (default: `"warn"`).
+- `fallback_layout` — a full layout dict (e.g. `{"cols": [0.0, 1.0], "rows":
+  [0.0, 1.0], "cells": [[0, 0, 1, 1]]}`), used only when `error_handling`
+  is `"fallback"` and the restore itself failed; `null` means give up
+  silently instead (default: null).
+- `focus_behavior` — whether opening a file/diff steals focus:
+  `"new_content"` (always), `"keep_current"` (never), `"alternate"` (only
+  if something else was already active) (default: `"new_content"`).
 
-**Commands:**
-- **AgentIDE: Restore Layout** — manually restore original window layout
-- **AgentIDE: Cleanup Layouts** — clean up saved layouts for non-existent windows
+**Commands:** **AgentIDE: Restore Layout** (manual restore) and
+**AgentIDE: Cleanup Layouts** (drop stale saved-layout/backup entries).
 
-**How It Works:**
-1. When AgentIDE creates a side group, it saves the original window layout
-2. When diffs/files are closed, layout restoration occurs based on `restore_timing`:
-   - "always" — restore immediately
-   - "when_empty" — restore only when no AgentIDE views remain (default)
-   - "manual" — only restore via command
-   - "never" — never restore automatically
-3. The restore uses the correct window ID to avoid multi-window bugs
-4. View tracking prevents collapsing layout under content still in use
-
-**Planned Settings (Not Yet Implemented):**
-Additional settings in the configuration file are reserved for future implementation including multi-window sync, project-specific layouts, layout templates, and advanced performance options.
+**Known limitation:** the restore only replays group geometry
+(cols/rows/cells), not which group each of your views was in or its tab
+order within that group. The split only ever happens when the window
+starts with a single group, so a restore can't scatter your files across
+the wrong groups -- everything ends up back in the one remaining group --
+but tab order within that group isn't guaranteed to match what you had
+before AgentIDE split the window.
 
 ## Fixed bugs worth knowing about
 

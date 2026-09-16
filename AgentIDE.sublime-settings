@@ -21,186 +21,76 @@
     // Debounce for selection_changed notifications (milliseconds).
     "selection_debounce_ms": 200,
 
-    // Window Layout and Split Behavior
-    "layout": {
-        // Restore original window layout after AgentIDE operations
-        "restore_on_close": true,
+    // --- Side-group split & restore ---
 
-        // When to restore: "always", "when_empty", "manual", "never"
-        "restore_timing": "when_empty",
+    // Save the window's layout before the first split, and restore it
+    // once AgentIDE no longer needs the side group.
+    "restore_on_close": true,
 
-        // Split position: "right", "left", "bottom", "top"
-        "split_position": "right",
+    // When to restore: "always" (as soon as a diff/file closes),
+    // "when_empty" (once no AgentIDE-opened content remains open),
+    // "manual" (only via the "AgentIDE: Restore Layout" command), "never".
+    "restore_timing": "when_empty",
 
-        // Split size as percentage (0.1 to 0.9)
-        "split_size": 0.45,
+    // Where the split goes: "right", "left", "bottom", "top".
+    "split_position": "right",
 
-        // Split orientation: "vertical", "horizontal"
-        "split_orientation": "vertical",
+    // Split size as a fraction of the window (0.1 to 0.9).
+    "split_size": 0.45,
 
-        // Create new window instead of splitting existing
-        "use_new_window": false,
+    // "vertical" (left/right split) or "horizontal" (top/bottom split).
+    "split_orientation": "vertical",
 
-        // Override existing window layout if needed
-        "override_existing_layout": true,
+    // If the window's viewport is narrower than this (layout px), don't
+    // split -- there isn't room for a useful side group.
+    "min_window_size": 400,
 
-        // Save user manual layout changes made during AgentIDE session
-        "preserve_manual_changes": false,
+    // If the window's viewport is wider than this (layout px), don't
+    // split. null disables the check.
+    "max_window_size": null,
 
-        // Layout behavior for multiple windows: "independent", "sync", "primary_only"
-        "multi_window_behavior": "independent",
+    // Shrink the split below split_size on narrow windows and grow it
+    // above split_size on wide windows.
+    "adaptive_layouts": true,
 
-        // Restore layout for specific window only or all windows
-        "restore_scope": "active_window",
+    // If the user has changed the window's layout since AgentIDE split
+    // it, skip the automatic restore rather than overwrite their change.
+    "preserve_manual_changes": false,
 
-        // Auto-collapse side group when not in use
-        "auto_collapse": false,
+    // Delay before applying an automatic restore (milliseconds), in case
+    // something else in the layout is still settling.
+    "restore_delay": 0,
 
-        // Expand side group on hover when collapsed
-        "expand_on_hover": false,
+    // Keep a short history of layouts under `restore_timing`, so a manual
+    // restore still has something to fall back to if Sublime reloaded the
+    // plugin and lost the in-memory saved layout.
+    "backup_layouts": true,
 
-        // Animation duration for layout transitions (ms)
-        "transition_duration": 0,
+    // How many of those backups to keep per window.
+    "max_backup_versions": 5,
 
-        // Focus behavior: "new_content", "keep_current", "alternate"
-        "focus_behavior": "new_content",
+    // Drop saved layouts/backups older than this many hours (covers a
+    // window whose diff/file was never closed, e.g. after a CLI
+    // disconnect). 0 disables the age-based cleanup.
+    "layout_gc_hours": 24,
 
-        // Z-order behavior for AgentIDE windows
-        "z_order": "normal",
+    // Also drop saved layouts/backups for windows that no longer exist,
+    // on plugin unload and via "AgentIDE: Cleanup Layouts".
+    "cleanup_on_exit": true,
 
-        // Full screen behavior: "respect", "exit", "ignore"
-        "fullscreen_behavior": "respect",
+    // If window.set_layout() itself raises while restoring: "warn" (status
+    // bar message), "error" (modal dialog), "ignore" (do nothing), or
+    // "fallback" (apply fallback_layout below, then give up silently).
+    "error_handling": "warn",
 
-        // Minimize/maximize behavior: "respect", "restore", "ignore"
-        "minimize_behavior": "respect",
+    // A full layout dict -- e.g. {"cols": [0.0, 1.0], "rows": [0.0, 1.0],
+    // "cells": [[0, 0, 1, 1]]} -- used only when error_handling is
+    // "fallback" and the restore itself fails. null means give up silently
+    // instead.
+    "fallback_layout": null,
 
-        // Session persistence: "remember", "reset", "ask"
-        "session_persistence": "reset",
-
-        // Project-specific layouts: "enabled", "disabled", "fallback"
-        "project_layouts": "disabled",
-
-        // Language-specific layouts: "enabled", "disabled", "fallback"
-        "language_layouts": "disabled",
-
-        // File-type-specific layouts: "enabled", "disabled", "fallback"
-        "filetype_layouts": "disabled",
-
-        // Diff-specific layout override
-        "diff_layout_override": null,
-
-        // Preview-specific layout override
-        "preview_layout_override": null,
-
-        // Custom layout templates by name
-        "layout_templates": {},
-
-        // Default layout template to use
-        "default_template": null,
-
-        // Garbage collection for saved layouts (hours)
-        "layout_gc_hours": 24,
-
-        // Maximum number of saved layouts per window
-        "max_saved_layouts": 10,
-
-        // Layout compression/optimization
-        "optimize_layouts": true,
-
-        // Layout validation before restore
-        "validate_on_restore": true,
-
-        // Fallback layout if restore fails
-        "fallback_layout": null,
-
-        // Layout migration on version change
-        "migrate_layouts": true,
-
-        // Layout backup before modification
-        "backup_layouts": true,
-
-        // Maximum backup versions
-        "max_backup_versions": 5,
-
-        // Layout checksum validation
-        "checksum_validation": false,
-
-        // Layout encryption for sensitive projects
-        "encrypt_layouts": false,
-
-        // Layout sharing between sessions
-        "share_layouts": false,
-
-        // Layout sync across multiple monitors
-        "multi_monitor_sync": false,
-
-        // Layout adaptation for different screen sizes
-        "adaptive_layouts": true,
-
-        // Minimum window size for split
-        "min_window_size": 400,
-
-        // Maximum window size for split
-        "max_window_size": null,
-
-        // Layout constraints: "strict", "loose", "none"
-        "layout_constraints": "loose",
-
-        // Tab bar behavior in side group: "show", "hide", "auto"
-        "tab_bar_behavior": "show",
-
-        // Scroll sync between groups: "enabled", "disabled", "manual"
-        "scroll_sync": "disabled",
-
-        // Linked scrolling behavior
-        "linked_scrolling": false,
-
-        // Independent scrolling in groups
-        "independent_scrolling": true,
-
-        // Maximize content on open
-        "maximize_on_open": false,
-
-        // Minimize other content on open
-        "minimize_others": false,
-
-        // Focus retention after close
-        "retain_focus": true,
-
-        // Window stacking order
-        "stacking_order": "normal",
-
-        // Workspace association for layouts
-        "workspace_association": false,
-
-        // Layout inheritance from parent windows
-        "layout_inheritance": true,
-
-        // Layout priority conflicts: "agentide", "user", "merge"
-        "layout_priority": "merge",
-
-        // Layout transition smoothing
-        "smooth_transitions": false,
-
-        // Layout restoration delay (ms)
-        "restore_delay": 0,
-
-        // Layout validation strictness: "strict", "moderate", "lenient"
-        "validation_strictness": "moderate",
-
-        // Layout error handling: "ignore", "warn", "error", "fallback"
-        "error_handling": "warn",
-
-        // Layout performance mode: "quality", "balanced", "performance"
-        "performance_mode": "balanced",
-
-        // Layout memory management: "aggressive", "normal", "conservative"
-        "memory_management": "normal",
-
-        // Layout cleanup on exit
-        "cleanup_on_exit": true,
-
-        // Layout diagnostics: "enabled", "disabled", "on_error"
-        "diagnostics": "on_error"
-    }
+    // Whether AgentIDE should focus the file/diff it just opened:
+    // "new_content" (always focus it), "keep_current" (never steal focus),
+    // "alternate" (focus it only if something else was already active).
+    "focus_behavior": "new_content"
 }

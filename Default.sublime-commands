@@ -6,9 +6,9 @@
             "base_file": "${packages}/AgentIDE/AgentIDE.sublime-settings"
         }
     },
-    { "caption": "AgentIDE: Status", "command": "agentide_status" },
-    { "caption": "AgentIDE: Restart Server", "command": "agentide_restart" },
-    { "caption": "AgentIDE: Restore Layout", "command": "agentide_restore_layout" },
-    { "caption": "AgentIDE: Cleanup Layouts", "command": "agentide_cleanup_layouts" },
-    { "caption": "AgentIDE: Send Selection as @-mention", "command": "agentide_at_mention" }
+    { "caption": "AgentIDE: Status", "command": "agent_ide_status" },
+    { "caption": "AgentIDE: Restart Server", "command": "agent_ide_restart" },
+    { "caption": "AgentIDE: Restore Layout", "command": "agent_ide_restore_layout" },
+    { "caption": "AgentIDE: Cleanup Layouts", "command": "agent_ide_cleanup_layouts" },
+    { "caption": "AgentIDE: Send Selection as @-mention", "command": "agent_ide_at_mention" }
 ]

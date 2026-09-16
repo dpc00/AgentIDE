@@ -20,6 +20,17 @@ from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
 
+
+class AgentIDEViewEventListener(sublime_plugin.EventListener):
+    """Handle view close events to untrack AgentIDE-opened files."""
+
+    def on_pre_close(self, view):
+        """Untrack view before it closes -- view.window() is already None
+        by on_close, so the untrack would silently no-op there."""
+        window = view.window()
+        if window:
+            context.untrack_agentIDE_view(window, view)
+
 SETTINGS_FILE = "AgentIDE.sublime-settings"
 VERSION = "0.0.1"
 
@@ -380,7 +391,7 @@ def _send_view_state(view):
     _notify("selection_changed", payload)
 
 
-class AgentideSelectionListener(sublime_plugin.EventListener):
+class AgentIDESelectionListener(sublime_plugin.EventListener):
     def on_selection_modified_async(self, view):
         if not is_running() or not _state["connected"]:
             return
@@ -409,7 +420,7 @@ class AgentideSelectionListener(sublime_plugin.EventListener):
         _send_view_state(view)
 
 
-class AgentideAtMentionCommand(sublime_plugin.TextCommand):
+class AgentIdeAtMentionCommand(sublime_plugin.TextCommand):
     """Send the current selection to the connected agent as an @-mention."""
 
     def run(self, edit):
@@ -428,7 +439,7 @@ class AgentideAtMentionCommand(sublime_plugin.TextCommand):
             "AgentIDE: sent @{}#L{}-{}".format(os.path.basename(view.file_name()), start_line + 1, end_line + 1))
 
 
-class AgentideReplaceContentCommand(sublime_plugin.TextCommand):
+class AgentIdeReplaceContentCommand(sublime_plugin.TextCommand):
     """Replace the whole buffer -- used by diff_view.accept() when the
     target file is open with unsaved changes."""
 
@@ -436,7 +447,7 @@ class AgentideReplaceContentCommand(sublime_plugin.TextCommand):
         self.view.replace(edit, sublime.Region(0, self.view.size()), text)
 
 
-class AgentideDiffCloseListener(sublime_plugin.EventListener):
+class AgentIDEDiffCloseListener(sublime_plugin.EventListener):
     def on_pre_close(self, view):
         diff_view.handle_view_close(view)
 
@@ -448,7 +459,7 @@ def launch_env_line():
     return "CLAUDE_CODE_SSE_PORT={} ENABLE_IDE_INTEGRATION=true claude".format(_state["port"])
 
 
-class AgentideStatusCommand(sublime_plugin.WindowCommand):
+class AgentIdeStatusCommand(sublime_plugin.WindowCommand):
     def run(self):
         if not is_running():
             sublime.message_dialog("AgentIDE: stopped")
@@ -459,13 +470,13 @@ class AgentideStatusCommand(sublime_plugin.WindowCommand):
                 _state["port"], conn, lockfile.lock_path(_state["port"]), launch_env_line()))
 
 
-class AgentideRestartCommand(sublime_plugin.WindowCommand):
+class AgentIdeRestartCommand(sublime_plugin.WindowCommand):
     def run(self):
         stop()
         start()
 
 
-class AgentideRestoreLayoutCommand(sublime_plugin.WindowCommand):
+class AgentIdeRestoreLayoutCommand(sublime_plugin.WindowCommand):
     def run(self):
         window = self.window
         if window:
@@ -473,7 +484,7 @@ class AgentideRestoreLayoutCommand(sublime_plugin.WindowCommand):
             sublime.status_message("AgentIDE: layout restored")
 
 
-class AgentideCleanupLayoutsCommand(sublime_plugin.WindowCommand):
+class AgentIdeCleanupLayoutsCommand(sublime_plugin.WindowCommand):
     def run(self):
         """Clean up saved layouts for windows that no longer exist."""
         context.cleanup_layouts()
