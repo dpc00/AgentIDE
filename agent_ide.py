@@ -394,6 +394,25 @@ class AgentideSelectionListener(sublime_plugin.EventListener):
 
         sublime.set_timeout_async(fire, delay)
 
+    def on_activated_async(self, view):
+        if not is_running() or not _state["connected"]:
+            return
+        if view.file_name() is not None and not view.settings().get("is_widget"):
+            return  # a real file view -- on_selection_modified_async covers it
+        # Focus moved to something with no file (e.g. a GhostShell terminal
+        # tab): tell the CLI there's no active selection, so it doesn't keep
+        # showing a stale file reference until the next prompt refreshes it.
+        payload = {
+            "text": "", "filePath": None, "fileUrl": None,
+            "selection": {"start": {"line": 0, "character": 0},
+                          "end": {"line": 0, "character": 0}, "isEmpty": True},
+        }
+        serialized = json.dumps(payload, sort_keys=True)
+        if serialized == _state["last_selection_sent"]:
+            return
+        _state["last_selection_sent"] = serialized
+        _notify("selection_changed", payload)
+
 
 class AgentideAtMentionCommand(sublime_plugin.TextCommand):
     """Send the current selection to the connected agent as an @-mention."""
