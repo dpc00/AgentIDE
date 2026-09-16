@@ -15,7 +15,7 @@ import threading
 import sublime
 import sublime_plugin
 
-from . import context, diff_view
+from .lib import context, diff_view
 from .lib import lockfile
 from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests

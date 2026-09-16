@@ -9,7 +9,7 @@ import os
 
 import sublime
 
-from .lib.pathurl import path_to_uri
+from .pathurl import path_to_uri
 
 _latest_selection = None  # last non-empty selection payload seen, any view
 
