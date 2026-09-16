@@ -1,3 +1,4 @@
+
 """AgentIDE — a standalone Sublime Text bridge to any IDE-protocol agent CLI.
 
 Third slice: registers the selection/context tools (openFile,
@@ -350,11 +351,39 @@ def _notify(method, params):
     log("_notify({}) -> {} client(s): {}".format(method, sent, msg[:300]))
 
 
+def _no_file_payload(view):
+    # Confirmed live 2026-09-15: a null filePath never actually cleared the
+    # CLI's own display even though AgentIDE sent it correctly -- its
+    # client only updates on a truthy filePath. The tab's own name doubles
+    # as a readable non-null value here.
+    tab_label = view.name() or "untitled"
+    return {
+        "text": "", "filePath": tab_label, "fileUrl": None, "viewName": tab_label,
+        "selection": {"start": {"line": 0, "character": 0},
+                      "end": {"line": 0, "character": 0}, "isEmpty": True},
+    }
+
+
+def _send_view_state(view):
+    """Send whatever the CLI should know about this view right now --
+    real-file selection or the no-file placeholder. Shared by both
+    on_activated_async (switching to a tab, even with no selection
+    change) and on_selection_modified_async (moving the cursor within
+    the already-active tab) so either one alone keeps the CLI in sync."""
+    if view.file_name() is not None and not view.settings().get("is_widget"):
+        payload = context.remember_selection(view)
+    else:
+        payload = _no_file_payload(view)
+    serialized = json.dumps(payload, sort_keys=True)
+    if serialized == _state["last_selection_sent"]:
+        return
+    _state["last_selection_sent"] = serialized
+    _notify("selection_changed", payload)
+
+
 class AgentideSelectionListener(sublime_plugin.EventListener):
     def on_selection_modified_async(self, view):
         if not is_running() or not _state["connected"]:
-            log("on_selection_modified_async skipped: running={} connected={}".format(
-                is_running(), _state["connected"]))
             return
         if view.file_name() is None or view.settings().get("is_widget"):
             return
@@ -366,38 +395,19 @@ class AgentideSelectionListener(sublime_plugin.EventListener):
         def fire():
             if token != _state["debounce_token"]:
                 return  # superseded by a newer selection change
-            payload = context.remember_selection(view)
-            serialized = json.dumps(payload, sort_keys=True)
-            if serialized == _state["last_selection_sent"]:
-                return
-            _state["last_selection_sent"] = serialized
-            _notify("selection_changed", payload)
+            _send_view_state(view)
 
         sublime.set_timeout_async(fire, delay)
 
     def on_activated_async(self, view):
+        # Switching to a tab by clicking its header, with the cursor left
+        # where it was, doesn't fire on_selection_modified_async at all
+        # (Sublime only fires that on an actual selection change) -- so
+        # this must handle every activation itself, real file or not,
+        # rather than deferring file views to the selection listener.
         if not is_running() or not _state["connected"]:
-            log("on_activated_async skipped: running={} connected={}".format(
-                is_running(), _state["connected"]))
             return
-        if view.file_name() is not None and not view.settings().get("is_widget"):
-            return  # a real file view -- on_selection_modified_async covers it
-        # Focus moved to something with no file (e.g. a GhostShell terminal
-        # tab). Confirmed live 2026-09-15: a null filePath never actually
-        # cleared the CLI's own display even though AgentIDE sent it
-        # correctly -- its client only updates on a truthy filePath. The
-        # tab's own name doubles as a readable non-null value here.
-        tab_label = view.name() or "untitled"
-        payload = {
-            "text": "", "filePath": tab_label, "fileUrl": None, "viewName": tab_label,
-            "selection": {"start": {"line": 0, "character": 0},
-                          "end": {"line": 0, "character": 0}, "isEmpty": True},
-        }
-        serialized = json.dumps(payload, sort_keys=True)
-        if serialized == _state["last_selection_sent"]:
-            return
-        _state["last_selection_sent"] = serialized
-        _notify("selection_changed", payload)
+        _send_view_state(view)
 
 
 class AgentideAtMentionCommand(sublime_plugin.TextCommand):
