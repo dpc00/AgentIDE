@@ -155,3 +155,63 @@ Please revert AgentIDE.sublime-settings and the README addition, and
 either fix the actual bug in context.py/diff_view.py (use
 `rec["window_id"]`, guard against stomping manual layout changes) or
 don't touch this at all.
+
+## Follow-up #3: window_id fix landed, but two new bugs + settings still mostly fake
+
+Good news: `_teardown()` now correctly looks up the window by
+`rec["window_id"]` instead of `sublime.active_window()`, and gates
+`"when_empty"` restore on `has_agentide_views()`. That part of the
+original bug report is actually fixed now.
+
+Two new problems in this pass, though:
+
+**1. View tracking leaks, which breaks `restore_timing: "when_empty"` by
+default.** `context.open_file()` calls `track_agentide_view(window, view)`
+for every non-preview open, but nothing calls `untrack_agentide_view` for
+those views — only diff views get untracked, in
+`diff_view._teardown()`. So the first time a user opens a regular file
+through AgentIDE, that window's `_agentide_views` set gets an entry that
+is *never removed*, even after the user closes the file themselves (there's
+no `on_pre_close` hook wired up for plain opens, unlike diffs). Since the
+default `restore_timing` is `"when_empty"`, and `has_agentide_views()`
+checks that now-permanently-nonempty set, the layout will never
+auto-restore again for that window after the first plain file open. This
+is the opposite of the feature's purpose.
+
+**2. Wrong API for the window-size check, and it can crash.** The new
+`min_window_size`/`max_window_size` logic in `side_group()` does:
+
+```python
+window_rect = window.active_view().viewport_position()
+if window_rect and len(window_rect) >= 2:
+    width = window.active_view().layout_extent()[0]
+```
+
+`view.layout_extent()` returns the *content* extent of that view's
+buffer (how wide the text/layout is), not the window's pixel width. This
+doesn't measure what it claims to measure — a window showing a narrow
+file would look "too small" and skip the split; a window showing a very
+long line would look "huge" regardless of actual window size. It will
+also raise `AttributeError` if `window.active_view()` is `None` (e.g. a
+freshly opened empty window), since `None` has no `.viewport_position()`.
+
+**Settings: still mostly not wired up.** Of the ~40 keys under `layout`
+in `AgentIDE.sublime-settings`, about 15 are actually read
+(`restore_on_close`, `restore_timing`, `split_position/size/orientation`,
+`use_new_window`, `adaptive_layouts`, `preserve_manual_changes`,
+`validate_on_restore`, `fallback_layout`, `backup_layouts`,
+`restore_delay`, `error_handling`, `cleanup_on_exit`, `focus_behavior`,
+`min/max_window_size`). The rest — `encrypt_layouts`,
+`checksum_validation`, `multi_monitor_sync`, `session_persistence`,
+`layout_templates`, `project_layouts`, `language_layouts`,
+`filetype_layouts`, `scroll_sync`, `stacking_order`, etc. — are still
+documented in the README and settings file as if they do something, and
+don't. This is the same complaint as Follow-up #2, just partially
+addressed instead of reverted.
+
+Given how much of this settings surface is unused, I'd genuinely
+reconsider whether this needed to become a ~15-knob configurable layout
+system at all, versus a much smaller fix: track the window id
+correctly (done), and skip the size heuristics and the settings that
+aren't load-bearing. A user hitting a bug wants the split behavior to
+work, not a settings block that's mostly placebo.
