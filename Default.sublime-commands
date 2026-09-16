@@ -1,0 +1,4 @@
+[
+    { "caption": "AgentIDE: Status", "command": "agentide_status" },
+    { "caption": "AgentIDE: Restart Server", "command": "agentide_restart" }
+]

@@ -1,0 +1,4 @@
+{
+    // Print connection/handshake traffic to the Sublime console.
+    "debug": true
+}
