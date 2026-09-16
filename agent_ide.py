@@ -21,7 +21,6 @@ from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
 
 SETTINGS_FILE = "AgentIDE.sublime-settings"
-STATUS_KEY = "zz_agentide"
 VERSION = "0.0.1"
 
 _state = {
@@ -128,7 +127,6 @@ def start():
     _state.update({"server": server, "mcp": mcp, "token": token, "port": port, "connected": False})
     diff_view.set_resolver(_resolve_and_send)
     log("started on port {} (lock written at {})".format(port, lockfile.lock_path(port)))
-    _refresh_status_bar()
     return port
 
 
@@ -148,7 +146,6 @@ def stop():
     if port is not None:
         lockfile.remove_lock(port)
     _state.update({"server": None, "mcp": None, "token": None, "port": None, "connected": False})
-    _refresh_status_bar()
     log("stopped")
 
 
@@ -178,7 +175,6 @@ def _on_message(client_id, text):
 
 def _on_connect(client_id):
     _state["connected"] = True
-    _refresh_status_bar()
     log("client #{} connected".format(client_id))
 
 
@@ -190,7 +186,6 @@ def _on_disconnect(client_id):
         log("diff cleanup on disconnect failed: {}".format(exc))
     server = _state["server"]
     _state["connected"] = server.client_count > 0 if server else False
-    _refresh_status_bar()
     log("client #{} disconnected".format(client_id))
 
 
@@ -200,24 +195,6 @@ def _status_text():
     if _state["connected"]:
         return "AgentIDE ⚡:{}".format(_state["port"])
     return "AgentIDE ○:{}".format(_state["port"])
-
-
-def _refresh_status_bar():
-    def op():
-        text = _status_text()
-        for window in sublime.windows():
-            view = window.active_view()
-            if view is None:
-                continue
-            if text:
-                view.set_status(STATUS_KEY, text)
-            else:
-                view.erase_status(STATUS_KEY)
-
-    try:
-        run_on_main(op)
-    except Exception as exc:  # noqa: BLE001
-        log("status bar update failed: {}".format(exc))
 
 
 def _register_tools(mcp):
