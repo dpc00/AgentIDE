@@ -28,8 +28,10 @@ When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
   original content set as its diff baseline via ST's own built-in
   Incremental Diff engine (`View.set_reference_document`) — native gutter
   markers, Ctrl+./Ctrl+, hunk navigation, and Ctrl+K,Ctrl+Z per-hunk revert,
-  no hand-built two-pane comparison. Accept/Reject is a phantom at the top
-  of the buffer; closing the tab counts as Reject.
+  no hand-built two-pane comparison. The buffer is locked read-only once
+  loaded, so it can't be hand-edited while a request is pending. Accept/
+  Reject is a phantom at the top of the buffer; closing the tab counts as
+  Reject.
 - **Context tools** — `openFile`, `getCurrentSelection`, `getLatestSelection`,
   `getOpenEditors`, `getWorkspaceFolders`, `checkDocumentDirty`,
   `saveDocument`, `getDiagnostics` (always empty for now — no linter/LSP
@@ -67,6 +69,29 @@ When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
   the selection listener.
 - Removed a status-bar broadcast that leaked `"AgentIDE <state>:<port>"`
   onto every window's active view, including unrelated GhostShell tabs.
+- **Accepting a diff for a CRLF file silently rewrote it as LF-only.**
+  The old code read/wrote raw bytes with Python's `open()`; `View.substr()`
+  is always LF-only internally, so nothing ever restored the original
+  convention. Fixed by never writing raw bytes at all — every write now
+  goes through a real, file-backed `View` and `View.save()`, so line
+  endings/encoding come from Sublime's own detection. If the target
+  wasn't already open, AgentIDE opens (or creates) a view just to save
+  through it, then closes that view again and restores focus, so Accept
+  never leaves a surprise tab behind or steals focus off the diff review.
+
+## Caveat: don't edit AgentIDE's own source through its own diff review
+
+If the file being diffed is one of AgentIDE's own source files, saving it
+triggers Sublime's plugin auto-reload of that very module *while the
+request is still in flight*. Reloading re-executes the module top to
+bottom, resetting its module-level state (`_diffs`, `_phantom_sets`,
+`_resolver`) out from under the running call. Symptoms: the Accept/Reject
+phantom disappears but the tab doesn't close, and the CLI's own
+permission prompt hangs forever because the response can no longer reach
+it. Same hazard already known for `ai_terminal.py` in GhostShell and for
+editing `sublime_mcp.py` live — a plugin can't safely mediate a live edit
+to its own source. Edit AgentIDE's own files with a plain editor/Bash,
+never by routing the change through its own live `/ide` connection.
 
 ## Testing
 

@@ -196,16 +196,24 @@ def _write_target(target, content, on_done, on_error):
     """Never write raw bytes ourselves -- always push the content through a
     real, file-backed Sublime view and let View.save() write it, so the
     view's own (auto-detected) line_endings()/encoding() are honored
-    instead of guessed at or silently discarded."""
+    instead of guessed at or silently discarded.
+
+    If the target already has an open view, write into that one and leave
+    it exactly as the user had it. Otherwise AgentIDE has to open or create
+    a view just to save through -- that view is closed again afterward and
+    the previously-focused view/tab is restored, so accepting a diff never
+    leaves a surprise new tab behind or steals focus off the diff review."""
+    window = sublime.active_window()
+    refocus = window.active_view()
+
     existing = context.find_view(target)
     if existing is not None:
-        _apply_and_save(existing, content, on_done, on_error)
+        _apply_and_save(existing, content, on_done, on_error, close_after=False, refocus=None)
         return
 
-    window = sublime.active_window()
     if os.path.exists(target):
         view = window.open_file(target)
-        _finish_when_loaded(view, content, on_done, on_error)
+        _finish_when_loaded(view, content, on_done, on_error, refocus)
         return
 
     try:
@@ -217,26 +225,33 @@ def _write_target(target, content, on_done, on_error):
         return
     view = window.new_file()
     view.retarget(target)
-    _apply_and_save(view, content, on_done, on_error)
+    _apply_and_save(view, content, on_done, on_error, close_after=True, refocus=refocus)
 
 
-def _finish_when_loaded(view, content, on_done, on_error, tries=200):
+def _finish_when_loaded(view, content, on_done, on_error, refocus, tries=200):
     if view.is_loading():
         if tries <= 0:
             on_error(OSError("Timed out waiting for {} to load".format(target_name(view))))
             return
-        sublime.set_timeout(lambda: _finish_when_loaded(view, content, on_done, on_error, tries - 1), 20)
+        sublime.set_timeout(lambda: _finish_when_loaded(view, content, on_done, on_error, refocus, tries - 1), 20)
         return
-    _apply_and_save(view, content, on_done, on_error)
+    _apply_and_save(view, content, on_done, on_error, close_after=True, refocus=refocus)
 
 
-def _apply_and_save(view, content, on_done, on_error):
+def _apply_and_save(view, content, on_done, on_error, close_after, refocus):
     view.run_command("agentide_replace_content", {"text": content})
     try:
         view.run_command("save")
     except Exception as exc:  # noqa: BLE001 - surface any save failure to the caller
         on_error(exc)
         return
+    if close_after:
+        view.set_scratch(True)
+        view.close()
+    if refocus is not None:
+        window = refocus.window()
+        if window is not None:
+            window.focus_view(refocus)
     on_done()
 
 
