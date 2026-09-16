@@ -43,14 +43,16 @@ def _parse_request_head(raw):
     return headers
 
 
-def _handshake_response(client_key):
+def _handshake_response(client_key, subprotocol=None):
     lines = [
         "HTTP/1.1 101 Switching Protocols",
         "Upgrade: websocket",
         "Connection: Upgrade",
         "Sec-WebSocket-Accept: {}".format(_accept_key(client_key)),
-        "", "",
     ]
+    if subprotocol:
+        lines.append("Sec-WebSocket-Protocol: {}".format(subprotocol))
+    lines.extend(["", ""])
     return "\r\n".join(lines).encode("ascii")
 
 
@@ -235,8 +237,16 @@ class WSServer:
             conn.close()
             return False
 
+        self._log("handshake headers: {}".format(headers))
+        subprotocol = None
+        requested = headers.get("sec-websocket-protocol")
+        if requested:
+            # Some WS clients (e.g. Node's `ws` with `protocols` set) drop
+            # the connection immediately if the server doesn't echo one back.
+            subprotocol = requested.split(",")[0].strip()
+
         try:
-            conn.sendall(_handshake_response(client_key))
+            conn.sendall(_handshake_response(client_key, subprotocol))
         except OSError:
             conn.close()
             return False

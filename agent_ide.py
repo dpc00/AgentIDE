@@ -1,4 +1,4 @@
-"""AgentIDE: a standalone Sublime Text bridge to any IDE-protocol agent CLI.
+"""AgentIDE — a standalone Sublime Text bridge to any IDE-protocol agent CLI.
 
 First slice, deliberately narrow: start a WebSocket+MCP server, write the
 discovery lock file, and prove a real agent CLI's `/ide` command can
@@ -93,6 +93,7 @@ def start():
     )
     port = server.start()
 
+    lockfile.prune_stale_locks()
     folders = _all_workspace_folders()
     lockfile.write_lock(
         port=port, pid=os.getpid(), workspace_folders=folders,
