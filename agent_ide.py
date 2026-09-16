@@ -366,14 +366,18 @@ def _notify(method, params):
     connected session."""
     server = _state["server"]
     if server is None:
+        log("_notify({}) dropped: server not running".format(method))
         return
     msg = json.dumps({"jsonrpc": "2.0", "method": method, "params": params}, ensure_ascii=False)
-    server.broadcast(msg)
+    sent = server.broadcast(msg)
+    log("_notify({}) -> {} client(s): {}".format(method, sent, msg[:300]))
 
 
 class AgentideSelectionListener(sublime_plugin.EventListener):
     def on_selection_modified_async(self, view):
         if not is_running() or not _state["connected"]:
+            log("on_selection_modified_async skipped: running={} connected={}".format(
+                is_running(), _state["connected"]))
             return
         if view.file_name() is None or view.settings().get("is_widget"):
             return
@@ -396,6 +400,8 @@ class AgentideSelectionListener(sublime_plugin.EventListener):
 
     def on_activated_async(self, view):
         if not is_running() or not _state["connected"]:
+            log("on_activated_async skipped: running={} connected={}".format(
+                is_running(), _state["connected"]))
             return
         if view.file_name() is not None and not view.settings().get("is_widget"):
             return  # a real file view -- on_selection_modified_async covers it
