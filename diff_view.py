@@ -68,7 +68,6 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
         "view_id": view.id(),
         "window_id": window.id(),
         "target": target,
-        "baseline": old_text,
         "resolved": False,
     }
     view.show(sublime.Region(0, 0))
@@ -118,18 +117,6 @@ def accept(tab_name):
     view = _view_by_id(rec["view_id"])
     if view is None:
         return reject(tab_name)
-    if _target_changed_since_baseline(rec):
-        choice = sublime.yes_no_cancel_dialog(
-            "AgentIDE diff: {} has changed on disk since this review opened "
-            "(edited another way while this diff was pending).\n\n"
-            "Accept anyway and overwrite it, or Reject to keep the current "
-            "file as-is?".format(os.path.basename(rec["target"])),
-            "Overwrite", "Reject",
-        )
-        if choice == sublime.DIALOG_CANCEL:
-            return False  # leave the diff open, decide later
-        if choice == sublime.DIALOG_NO:
-            return reject(tab_name)
     content = view.substr(sublime.Region(0, view.size()))
     try:
         _write_target(rec["target"], content)
@@ -200,27 +187,6 @@ def close_all_silent():
 
 
 # ---------- internals ----------
-
-
-def _target_changed_since_baseline(rec):
-    """True if the target file's real current content no longer matches
-    what this diff was opened against -- something else wrote to it
-    while the review was pending (another edit path, another tool, the
-    user directly). Checks the open dirty view first if there is one,
-    since that reflects unsaved changes the file on disk wouldn't."""
-    target = rec["target"]
-    existing = context.find_view(target)
-    if existing is not None and existing.is_dirty():
-        current = existing.substr(sublime.Region(0, existing.size()))
-        return current != rec["baseline"]
-    if not os.path.exists(target):
-        return bool(rec["baseline"])  # baseline was non-empty, file is now gone
-    try:
-        with open(target, encoding="utf-8", errors="replace") as fh:
-            current = fh.read()
-    except OSError:
-        return False  # can't tell; don't block accept on a read failure
-    return current != rec["baseline"]
 
 
 def _write_target(target, content):
