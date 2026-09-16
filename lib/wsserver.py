@@ -156,7 +156,7 @@ class WSServer:
             raise OSError("could not bind a port in {}-{}: {}".format(lo, hi, last_error))
 
         self._running = True
-        threading.Thread(target=self._accept_loop, name="agentide-accept", daemon=True).start()
+        threading.Thread(target=self._accept_loop, name="agentIDE-accept", daemon=True).start()
         self._log("listening on 127.0.0.1:{}".format(self.port))
         return self.port
 
@@ -207,7 +207,7 @@ class WSServer:
                 break
             self._log("connection from {}".format(addr))
             threading.Thread(target=self._client_loop, args=(conn,),
-                              name="agentide-client", daemon=True).start()
+                              name="agentIDE-client", daemon=True).start()
 
     def _handshake(self, conn):
         conn.settimeout(5)

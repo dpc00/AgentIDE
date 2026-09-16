@@ -78,7 +78,7 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
 
 def _add_action_phantom(view, tab_name):
     html = """
-    <body id="agentide-diff-actions">
+    <body id="agentIDE-diff-actions">
       <style>
         body { padding: 6px 0; }
         a.btn { padding: 3px 12px; border-radius: 4px; text-decoration: none; }
@@ -92,7 +92,7 @@ def _add_action_phantom(view, tab_name):
         <span class="hint">Gutter marks show the diff -- Ctrl+K,Ctrl+Z reverts a hunk, Ctrl+./Ctrl+, navigate</span>
       </div>
     </body>"""
-    ps = sublime.PhantomSet(view, "agentide_diff_actions")
+    ps = sublime.PhantomSet(view, "agentIDE_diff_actions")
     phantom = sublime.Phantom(
         sublime.Region(0, 0), html, sublime.LAYOUT_BLOCK,
         on_navigate=lambda href, t=tab_name: _on_action(href, t),
@@ -239,7 +239,7 @@ def _finish_when_loaded(view, content, on_done, on_error, refocus, tries=200):
 
 
 def _apply_and_save(view, content, on_done, on_error, close_after, refocus):
-    view.run_command("agentide_replace_content", {"text": content})
+    view.run_command("agent_ide_replace_content", {"text": content})
     try:
         view.run_command("save")
     except Exception as exc:  # noqa: BLE001 - surface any save failure to the caller
@@ -269,30 +269,22 @@ def _teardown(tab_name):
         view.set_scratch(True)
         view.close()
 
-    # Untrack this view
     window_id = rec.get("window_id")
-    if window_id and view:
-        for window in sublime.windows():
-            if window.id() == window_id:
-                context.untrack_agentide_view(window, view)
-                break
+    if window_id is None:
+        return
 
-    # Restore layout using the correct window ID from the record
-    if window_id:
-        for window in sublime.windows():
-            if window.id() == window_id:
-                layout_settings = context.settings().get("layout", {})
-                restore_timing = layout_settings.get("restore_timing", "when_empty")
+    window = _window_by_id(window_id)
+    if window is None:
+        return
 
-                # Only restore if timing condition is met
-                if restore_timing == "always":
-                    context.restore_layout(window)
-                elif restore_timing == "when_empty":
-                    # Only restore if no more AgentIDE views in this window
-                    if not context.has_agentide_views(window):
-                        context.restore_layout(window)
-                # "manual" and "never" don't auto-restore
-                break
+    restore_timing = context.settings().get("restore_timing", "when_empty")
+    if restore_timing == "always":
+        context.restore_layout(window)
+    elif restore_timing == "when_empty":
+        other_diffs_open = any(r["window_id"] == window_id for r in _diffs.values())
+        if not other_diffs_open and not context.has_agentIDE_views(window):
+            context.restore_layout(window)
+    # "manual" and "never" don't auto-restore
 
 
 def _syntax_for(path):
@@ -307,4 +299,18 @@ def _view_by_id(view_id):
         for view in window.views():
             if view.id() == view_id:
                 return view
+    return None
+
+
+def _window_by_id(window_id):
+    for window in sublime.windows():
+        if window.id() == window_id:
+            return window
+    return None
+
+
+def _window_by_id(window_id):
+    for window in sublime.windows():
+        if window.id() == window_id:
+            return window
     return None
