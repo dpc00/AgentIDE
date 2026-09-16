@@ -1,0 +1,24 @@
+[
+    {
+        "id": "preferences",
+        "children": [
+            {
+                "id": "package-settings",
+                "children": [
+                    {
+                        "caption": "AgentIDE",
+                        "children": [
+                            {
+                                "caption": "Settings",
+                                "command": "edit_settings",
+                                "args": {
+                                    "base_file": "${packages}/AgentIDE/AgentIDE.sublime-settings"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+]

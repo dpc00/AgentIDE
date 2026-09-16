@@ -1,4 +1,11 @@
 [
+    {
+        "caption": "Preferences: AgentIDE Settings",
+        "command": "edit_settings",
+        "args": {
+            "base_file": "${packages}/AgentIDE/AgentIDE.sublime-settings"
+        }
+    },
     { "caption": "AgentIDE: Status", "command": "agentide_status" },
     { "caption": "AgentIDE: Restart Server", "command": "agentide_restart" },
     { "caption": "AgentIDE: Send Selection as @-mention", "command": "agentide_at_mention" }
