@@ -46,9 +46,10 @@ class Dispatcher:
         self._methods[name] = handler
 
     def dispatch(self, message, ctx=None):
-        ctx = ctx or {}
+        ctx = dict(ctx or {})
         method = message.get("method")
         msg_id = message.get("id")
+        ctx["id"] = msg_id
         handler = self._methods.get(method)
         if handler is None:
             if msg_id is None:

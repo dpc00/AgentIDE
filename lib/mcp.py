@@ -27,6 +27,12 @@ def wrap_content(result):
     return {"content": [{"type": "text", "text": t} for t in texts]}
 
 
+def tool_text_response(msg_id, payload):
+    """Build a full JSON-RPC response for a tool result resolved out of
+    band (a deferred tool like openDiff, once the user acts)."""
+    return jsonrpc.response(msg_id, wrap_content(payload))
+
+
 class MCPServer:
     def __init__(self, server_name="Sublime Text (AgentIDE)", version="0.0.1", logger=None):
         self._server_name = server_name
@@ -89,4 +95,6 @@ class MCPServer:
             return wrapped
         if result is DEFERRED:
             return DEFERRED
+        if isinstance(result, dict) and "content" in result:
+            return result  # handler already built its own content blocks
         return wrap_content(result)
