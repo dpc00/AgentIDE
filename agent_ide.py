@@ -408,8 +408,11 @@ class AgentideSelectionListener(sublime_plugin.EventListener):
         # Focus moved to something with no file (e.g. a GhostShell terminal
         # tab): tell the CLI there's no active selection, so it doesn't keep
         # showing a stale file reference until the next prompt refreshes it.
+        # viewName identifies which tab this is (GhostShell names its tabs
+        # per session/profile, e.g. "Claude", "Codex") instead of collapsing
+        # every non-file view into an indistinguishable blank.
         payload = {
-            "text": "", "filePath": None, "fileUrl": None,
+            "text": "", "filePath": None, "fileUrl": None, "viewName": view.name() or None,
             "selection": {"start": {"line": 0, "character": 0},
                           "end": {"line": 0, "character": 0}, "isEmpty": True},
         }
