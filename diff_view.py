@@ -59,6 +59,7 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
         view.assign_syntax(syntax)
     view.run_command("append", {"characters": new_file_contents})
     view.set_reference_document(old_text)
+    view.set_read_only(True)
 
     _add_action_phantom(view, tab_name)
 
@@ -118,17 +119,19 @@ def accept(tab_name):
     if view is None:
         return reject(tab_name)
     content = view.substr(sublime.Region(0, view.size()))
-    try:
-        _write_target(rec["target"], content)
-    except OSError as exc:
+
+    def on_written():
+        rec["resolved"] = True
+        # Two content blocks: the reference client ignores a bare FILE_SAVED
+        # and re-prompts without the body if the final content isn't included.
+        _resolve(rec["client_id"], rec["request_id"], ["FILE_SAVED", content])
+        _teardown(tab_name)
+        sublime.status_message("AgentIDE diff accepted → {}".format(os.path.basename(rec["target"])))
+
+    def on_error(exc):
         sublime.error_message("AgentIDE diff: writing {} failed:\n{}".format(rec["target"], exc))
-        return False
-    rec["resolved"] = True
-    # Two content blocks: the reference client ignores a bare FILE_SAVED
-    # and re-prompts without the body if the final content isn't included.
-    _resolve(rec["client_id"], rec["request_id"], ["FILE_SAVED", content])
-    _teardown(tab_name)
-    sublime.status_message("AgentIDE diff accepted → {}".format(os.path.basename(rec["target"])))
+
+    _write_target(rec["target"], content, on_written, on_error)
     return True
 
 
@@ -189,22 +192,56 @@ def close_all_silent():
 # ---------- internals ----------
 
 
-def _write_target(target, content):
+def _write_target(target, content, on_done, on_error):
+    """Never write raw bytes ourselves -- always push the content through a
+    real, file-backed Sublime view and let View.save() write it, so the
+    view's own (auto-detected) line_endings()/encoding() are honored
+    instead of guessed at or silently discarded."""
     existing = context.find_view(target)
-    if existing is not None and existing.is_dirty():
-        # Overwriting the file on disk here would desync it from the open,
-        # unsaved view -- editing the view itself and saving normally keeps
-        # the user's unsaved changes from being silently discarded.
-        existing.run_command("agentide_replace_content", {"text": content})
-        existing.run_command("save")
-        return
-    directory = os.path.dirname(target)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    with open(target, "w", encoding="utf-8", newline="") as fh:
-        fh.write(content)
     if existing is not None:
-        existing.run_command("revert")
+        _apply_and_save(existing, content, on_done, on_error)
+        return
+
+    window = sublime.active_window()
+    if os.path.exists(target):
+        view = window.open_file(target)
+        _finish_when_loaded(view, content, on_done, on_error)
+        return
+
+    try:
+        directory = os.path.dirname(target)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+    except OSError as exc:
+        on_error(exc)
+        return
+    view = window.new_file()
+    view.retarget(target)
+    _apply_and_save(view, content, on_done, on_error)
+
+
+def _finish_when_loaded(view, content, on_done, on_error, tries=200):
+    if view.is_loading():
+        if tries <= 0:
+            on_error(OSError("Timed out waiting for {} to load".format(target_name(view))))
+            return
+        sublime.set_timeout(lambda: _finish_when_loaded(view, content, on_done, on_error, tries - 1), 20)
+        return
+    _apply_and_save(view, content, on_done, on_error)
+
+
+def _apply_and_save(view, content, on_done, on_error):
+    view.run_command("agentide_replace_content", {"text": content})
+    try:
+        view.run_command("save")
+    except Exception as exc:  # noqa: BLE001 - surface any save failure to the caller
+        on_error(exc)
+        return
+    on_done()
+
+
+def target_name(view):
+    return view.file_name() or view.name() or "?"
 
 
 def _teardown(tab_name):
