@@ -1,4 +1,23 @@
 {
     // Print connection/handshake traffic to the Sublime console.
-    "debug": true
+    "debug": true,
+
+    // Start the server when Sublime starts.
+    "auto_start": true,
+
+    // Fixed port (1024-65535), or null for a random port. A fixed port
+    // lets you set a machine-wide CLAUDE_CODE_SSE_PORT env var once so
+    // every CLI session auto-connects. Falls back to random if busy.
+    "port": null,
+
+    // Name shown in the connecting CLI's IDE picker and the lock file.
+    "ide_name": "Sublime Text",
+
+    // Open files the CLI shows (openFile) in a right-hand side group,
+    // keeping your own tabs untouched. Also used for where a diff review
+    // opens. Set false to use the active group.
+    "open_in_side_group": true,
+
+    // Debounce for selection_changed notifications (milliseconds).
+    "selection_debounce_ms": 200
 }

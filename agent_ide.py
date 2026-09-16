@@ -1,8 +1,9 @@
 """AgentIDE — a standalone Sublime Text bridge to any IDE-protocol agent CLI.
 
-Second slice: registers openDiff (blocking diff review via ST's native
-Incremental Diff engine, see diff_view.py), close_tab, and
-closeAllDiffTabs. Still no selection/context sharing.
+Third slice: registers the selection/context tools (openFile,
+getCurrentSelection, getLatestSelection, getOpenEditors,
+getWorkspaceFolders, checkDocumentDirty, saveDocument, executeCode-stub)
+and pushes selection_changed/at_mentioned notifications.
 """
 
 import json
@@ -13,9 +14,9 @@ import threading
 import sublime
 import sublime_plugin
 
-from . import diff_view
+from . import context, diff_view
 from .lib import lockfile
-from .lib.mcp import DEFERRED, MCPServer, tool_text_response
+from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
 
@@ -29,6 +30,8 @@ _state = {
     "token": None,
     "port": None,
     "connected": False,
+    "debounce_token": 0,
+    "last_selection_sent": None,
 }
 
 _pending = PendingRequests()
@@ -86,23 +89,40 @@ def start():
         return _state["port"]
 
     token = lockfile.generate_token()
-    mcp = MCPServer(server_name="Sublime Text (AgentIDE)", version=VERSION, logger=log)
+    ide_name = settings().get("ide_name") or "Sublime Text"
+    mcp = MCPServer(server_name=ide_name, version=VERSION, logger=log)
+    _register_tools(mcp)
+
+    port_setting = settings().get("port")
+    port_range = (10000, 65535)
+    if isinstance(port_setting, int) and 1024 <= port_setting <= 65535:
+        port_range = (port_setting, port_setting)
 
     server = WSServer(
         auth_token=token,
         on_message=_on_message,
         on_connect=_on_connect,
         on_disconnect=_on_disconnect,
+        port_range=port_range,
         logger=log,
     )
-    _register_tools(mcp)
-    port = server.start()
+    try:
+        port = server.start()
+    except OSError:
+        if port_range == (10000, 65535):
+            raise
+        log("fixed port {} busy, falling back to random".format(port_setting))
+        server = WSServer(
+            auth_token=token, on_message=_on_message, on_connect=_on_connect,
+            on_disconnect=_on_disconnect, logger=log,
+        )
+        port = server.start()
 
     lockfile.prune_stale_locks()
     folders = _all_workspace_folders()
     lockfile.write_lock(
         port=port, pid=os.getpid(), workspace_folders=folders,
-        auth_token=token, ide_name="Sublime Text",
+        auth_token=token, ide_name=ide_name,
     )
 
     _state.update({"server": server, "mcp": mcp, "token": token, "port": port, "connected": False})
@@ -231,6 +251,75 @@ def _register_tools(mcp):
         # shape, instead of erroring like before.
         lambda args, ctx: {"content": []})
 
+    mcp.register_tool(
+        "openFile", "Open a file in the editor and optionally select text",
+        {"type": "object", "properties": {
+            "filePath": {"type": "string"},
+            "preview": {"type": "boolean"},
+            "startText": {"type": "string"},
+            "endText": {"type": "string"},
+            "selectToEndOfLine": {"type": "boolean"},
+            "makeFrontmost": {"type": "boolean"},
+        }, "required": ["filePath"]},
+        _tool_open_file)
+
+    mcp.register_tool(
+        "getCurrentSelection", "Get the current selection in the active editor", obj,
+        lambda args, ctx: run_on_main(context.get_current_selection))
+
+    mcp.register_tool(
+        "getLatestSelection", "Get the most recent text selection (even from non-active editors)",
+        obj, lambda args, ctx: context.latest_selection() or {
+            "success": False, "message": "no selection recorded yet"})
+
+    mcp.register_tool(
+        "getOpenEditors", "List open editor tabs", obj,
+        lambda args, ctx: run_on_main(context.get_open_editors))
+
+    mcp.register_tool(
+        "getWorkspaceFolders", "List workspace folders", obj,
+        lambda args, ctx: run_on_main(context.get_workspace_folders))
+
+    mcp.register_tool(
+        "checkDocumentDirty", "Check whether a document has unsaved changes",
+        {"type": "object", "properties": {"filePath": {"type": "string"}},
+         "required": ["filePath"]},
+        lambda args, ctx: run_on_main(lambda: context.check_document_dirty(args.get("filePath", ""))))
+
+    mcp.register_tool(
+        "saveDocument", "Save a document",
+        {"type": "object", "properties": {"filePath": {"type": "string"}},
+         "required": ["filePath"]},
+        lambda args, ctx: run_on_main(lambda: context.save_document(args.get("filePath", ""))))
+
+    mcp.register_tool(
+        "executeCode", "Execute code in a Jupyter kernel", obj,
+        lambda args, ctx: (_ for _ in ()).throw(
+            ToolError("executeCode is not supported in Sublime Text")))
+
+
+def _tool_open_file(args, ctx):
+    file_path = args.get("filePath")
+    make_frontmost = bool(args.get("makeFrontmost", True))
+
+    def op():
+        try:
+            view = context.open_file(
+                file_path, preview=bool(args.get("preview", False)),
+                start_text=args.get("startText"), end_text=args.get("endText"),
+                select_to_eol=bool(args.get("selectToEndOfLine", False)),
+                make_frontmost=make_frontmost)
+        except FileNotFoundError:
+            raise ToolError("file not found: {}".format(file_path))
+        sublime.status_message("AgentIDE opened: {}".format(os.path.basename(file_path)))
+        return view
+
+    view = run_on_main(op)
+    if make_frontmost:
+        return "Opened file: {}".format(file_path)
+    return {"success": True, "filePath": file_path,
+            "languageId": run_on_main(lambda: context.language_id(view))}
+
 
 def _tool_open_diff(args, ctx):
     old_path = args.get("old_file_path") or ""
@@ -272,6 +361,67 @@ def _tool_close_tab(args, ctx):
     return "TAB_CLOSED"
 
 
+def _notify(method, params):
+    """Broadcast a notification (no id, no response expected) to every
+    connected session."""
+    server = _state["server"]
+    if server is None:
+        return
+    msg = json.dumps({"jsonrpc": "2.0", "method": method, "params": params}, ensure_ascii=False)
+    server.broadcast(msg)
+
+
+class AgentideSelectionListener(sublime_plugin.EventListener):
+    def on_selection_modified_async(self, view):
+        if not is_running() or not _state["connected"]:
+            return
+        if view.file_name() is None or view.settings().get("is_widget"):
+            return
+
+        _state["debounce_token"] += 1
+        token = _state["debounce_token"]
+        delay = int(settings().get("selection_debounce_ms", 200))
+
+        def fire():
+            if token != _state["debounce_token"]:
+                return  # superseded by a newer selection change
+            payload = context.remember_selection(view)
+            serialized = json.dumps(payload, sort_keys=True)
+            if serialized == _state["last_selection_sent"]:
+                return
+            _state["last_selection_sent"] = serialized
+            _notify("selection_changed", payload)
+
+        sublime.set_timeout_async(fire, delay)
+
+
+class AgentideAtMentionCommand(sublime_plugin.TextCommand):
+    """Send the current selection to the connected agent as an @-mention."""
+
+    def run(self, edit):
+        if not is_running() or not _state["connected"]:
+            sublime.status_message("AgentIDE: not connected")
+            return
+        view = self.view
+        if view.file_name() is None:
+            sublime.status_message("AgentIDE: no file for @-mention")
+            return
+        region = view.sel()[0] if len(view.sel()) > 0 else sublime.Region(0, 0)
+        start_line, _ = view.rowcol(region.begin())
+        end_line, _ = view.rowcol(region.end())
+        _notify("at_mentioned", {"filePath": view.file_name(), "lineStart": start_line, "lineEnd": end_line})
+        sublime.status_message(
+            "AgentIDE: sent @{}#L{}-{}".format(os.path.basename(view.file_name()), start_line + 1, end_line + 1))
+
+
+class AgentideReplaceContentCommand(sublime_plugin.TextCommand):
+    """Replace the whole buffer -- used by diff_view.accept() when the
+    target file is open with unsaved changes."""
+
+    def run(self, edit, text):
+        self.view.replace(edit, sublime.Region(0, self.view.size()), text)
+
+
 class AgentideDiffCloseListener(sublime_plugin.EventListener):
     def on_pre_close(self, view):
         diff_view.handle_view_close(view)
@@ -302,7 +452,8 @@ class AgentideRestartCommand(sublime_plugin.WindowCommand):
 
 
 def plugin_loaded():
-    start()
+    if settings().get("auto_start", True):
+        start()
 
 
 def plugin_unloaded():

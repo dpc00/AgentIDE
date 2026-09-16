@@ -15,6 +15,8 @@ import os
 
 import sublime
 
+from . import context
+
 _diffs = {}         # tab_name -> record dict
 _phantom_sets = {}  # view id -> PhantomSet (must be retained or it vanishes)
 _resolver = None    # set by agent_ide: fn(client_id, request_id, payload)
@@ -46,6 +48,9 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
     if tab_name in _diffs:
         tab_name = "{} ({})".format(tab_name, request_id)
 
+    group = context.side_group(window)
+    if group >= 0:
+        window.focus_group(group)
     view = window.new_file()
     view.set_scratch(True)
     view.set_name(tab_name)
@@ -185,7 +190,14 @@ def close_all_silent():
 
 
 def _write_target(target, content):
-    existing = _find_view(target)
+    existing = context.find_view(target)
+    if existing is not None and existing.is_dirty():
+        # Overwriting the file on disk here would desync it from the open,
+        # unsaved view -- editing the view itself and saving normally keeps
+        # the user's unsaved changes from being silently discarded.
+        existing.run_command("agentide_replace_content", {"text": content})
+        existing.run_command("save")
+        return
     directory = os.path.dirname(target)
     if directory:
         os.makedirs(directory, exist_ok=True)
@@ -217,15 +229,5 @@ def _view_by_id(view_id):
     for window in sublime.windows():
         for view in window.views():
             if view.id() == view_id:
-                return view
-    return None
-
-
-def _find_view(file_path):
-    norm = os.path.normcase(os.path.normpath(file_path))
-    for window in sublime.windows():
-        for view in window.views():
-            fn = view.file_name()
-            if fn and os.path.normcase(os.path.normpath(fn)) == norm:
                 return view
     return None
