@@ -10,20 +10,48 @@ purpose: embedding this in either of those repos would tie the bridge's
 reload lifecycle to a much larger plugin's, which is exactly what killed the
 predecessor feature (`ide_companion.py` in sublime-mcp, removed 2026-09-10).
 
-## Status: first slice
+## What it does
 
-Right now this only proves the handshake: starts a WebSocket+MCP server,
-writes the discovery lock file at `~/.claude/ide/<port>.lock`, and accepts
-a connection from a real agent CLI's `/ide` command. No tools, no diff
-review, no context sharing yet — those land once this is verified working
-end-to-end.
+When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
 
-## Testing this slice
+- **Diff review** — a proposed edit opens in a real Sublime buffer with the
+  original content set as its diff baseline via ST's own built-in
+  Incremental Diff engine (`View.set_reference_document`) — native gutter
+  markers, Ctrl+./Ctrl+, hunk navigation, and Ctrl+K,Ctrl+Z per-hunk revert,
+  no hand-built two-pane comparison. Accept/Reject is a phantom at the top
+  of the buffer; closing the tab counts as Reject.
+- **Context tools** — `openFile`, `getCurrentSelection`, `getLatestSelection`,
+  `getOpenEditors`, `getWorkspaceFolders`, `checkDocumentDirty`,
+  `saveDocument`, `getDiagnostics` (always empty for now — no linter/LSP
+  source wired in yet).
+- **Selection sharing** — debounced `selection_changed` notifications and an
+  `AgentIDE: Send Selection as @-mention` command.
+- `executeCode` is registered but explicitly unsupported (matches the
+  reference protocol's own behavior for editors with no code-execution
+  surface, rather than erroring as an unknown tool).
 
-1. Install (see below), restart Sublime.
+## Settings (`AgentIDE.sublime-settings`)
+
+- `debug` — print protocol traffic to the Sublime console.
+- `auto_start` — start the server when Sublime starts.
+- `port` — fixed port (falls back to random if busy), so a machine-wide
+  `CLAUDE_CODE_SSE_PORT` env var can point at one stable port.
+- `ide_name` — name shown in the connecting CLI's IDE picker and lock file.
+- `open_in_side_group` — open files/diffs in a right-hand pane instead of
+  replacing whatever you were looking at.
+- `selection_debounce_ms` — debounce for `selection_changed` notifications.
+
+## Testing
+
+1. Install (see below), restart Sublime Text — required after any AgentIDE
+   code change; its own plugin auto-reload is unreliable for a multi-file
+   package (submodule edits don't reliably get picked up), so restart
+   rather than trust a live reload.
 2. Command Palette → **AgentIDE: Status** to see the port and lock path.
 3. In a terminal: `claude`, then `/ide` — it should report connecting to
    Sublime Text.
+4. Ask Claude to edit a file — the diff should open in Sublime instead of
+   the terminal.
 
 ## Install (dev)
 
