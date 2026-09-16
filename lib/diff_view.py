@@ -269,6 +269,31 @@ def _teardown(tab_name):
         view.set_scratch(True)
         view.close()
 
+    # Untrack this view
+    window_id = rec.get("window_id")
+    if window_id and view:
+        for window in sublime.windows():
+            if window.id() == window_id:
+                context.untrack_agentide_view(window, view)
+                break
+
+    # Restore layout using the correct window ID from the record
+    if window_id:
+        for window in sublime.windows():
+            if window.id() == window_id:
+                layout_settings = context.settings().get("layout", {})
+                restore_timing = layout_settings.get("restore_timing", "when_empty")
+
+                # Only restore if timing condition is met
+                if restore_timing == "always":
+                    context.restore_layout(window)
+                elif restore_timing == "when_empty":
+                    # Only restore if no more AgentIDE views in this window
+                    if not context.has_agentide_views(window):
+                        context.restore_layout(window)
+                # "manual" and "never" don't auto-restore
+                break
+
 
 def _syntax_for(path):
     try:

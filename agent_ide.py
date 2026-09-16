@@ -15,8 +15,7 @@ import threading
 import sublime
 import sublime_plugin
 
-from .lib import context, diff_view
-from .lib import lockfile
+from .lib import context, diff_view, lockfile
 from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
@@ -466,10 +465,26 @@ class AgentideRestartCommand(sublime_plugin.WindowCommand):
         start()
 
 
+class AgentideRestoreLayoutCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        window = self.window
+        if window:
+            context.restore_layout(window)
+            sublime.status_message("AgentIDE: layout restored")
+
+
+class AgentideCleanupLayoutsCommand(sublime_plugin.WindowCommand):
+    def run(self):
+        """Clean up saved layouts for windows that no longer exist."""
+        context.cleanup_layouts()
+        sublime.status_message("AgentIDE: layout cleanup complete")
+
+
 def plugin_loaded():
     if settings().get("auto_start", True):
         start()
 
 
 def plugin_unloaded():
+    context.cleanup_layouts()
     stop()
