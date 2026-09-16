@@ -53,6 +53,48 @@ When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
   replacing whatever you were looking at.
 - `selection_debounce_ms` — debounce for `selection_changed` notifications.
 
+### Layout Configuration
+
+The `layout` section provides control over window layout behavior. Layout restoration is now implemented to fix the issue where AgentIDE permanently disrupted user window layouts.
+
+**Implemented Settings:**
+- `layout.restore_on_close` — restore original window layout after AgentIDE operations (default: true)
+- `layout.restore_timing` — when to restore: "always", "when_empty", "manual", "never" (default: "when_empty")
+- `layout.split_position` — where to split: "right", "left", "bottom", "top" (default: "right")
+- `layout.split_size` — split size as percentage 0.1-0.9 (default: 0.45)
+- `layout.split_orientation` — split orientation: "vertical", "horizontal" (default: "vertical")
+- `layout.use_new_window` — create new window instead of splitting existing (default: false)
+- `layout.preserve_manual_changes` — respect user manual layout changes made during AgentIDE session (default: false)
+- `layout.validate_on_restore` — validate layout before restoring (default: true)
+- `layout.fallback_layout` — fallback layout if validation fails (default: null)
+- `layout.backup_layouts` — create backups before modification (default: true)
+- `layout.max_backup_versions` — maximum backup versions (default: 5)
+- `layout.restore_delay` — delay before restore in milliseconds (default: 0)
+- `layout.error_handling` — how to handle errors: "ignore", "warn", "error", "fallback" (default: "warn")
+- `layout.min_window_size` — minimum window size for split (default: 400)
+- `layout.max_window_size` — maximum window size for split (default: null)
+- `layout.adaptive_layouts` — adjust split size based on screen size (default: true)
+- `layout.focus_behavior` — focus behavior: "new_content", "keep_current", "alternate" (default: "new_content")
+- `layout.cleanup_on_exit` — cleanup on plugin unload (default: true)
+- `layout.layout_gc_hours` — garbage collection interval in hours (default: 24)
+
+**Commands:**
+- **AgentIDE: Restore Layout** — manually restore original window layout
+- **AgentIDE: Cleanup Layouts** — clean up saved layouts for non-existent windows
+
+**How It Works:**
+1. When AgentIDE creates a side group, it saves the original window layout
+2. When diffs/files are closed, layout restoration occurs based on `restore_timing`:
+   - "always" — restore immediately
+   - "when_empty" — restore only when no AgentIDE views remain (default)
+   - "manual" — only restore via command
+   - "never" — never restore automatically
+3. The restore uses the correct window ID to avoid multi-window bugs
+4. View tracking prevents collapsing layout under content still in use
+
+**Planned Settings (Not Yet Implemented):**
+Additional settings in the configuration file are reserved for future implementation including multi-window sync, project-specific layouts, layout templates, and advanced performance options.
+
 ## Fixed bugs worth knowing about
 
 - **A null `filePath` in `selection_changed` never actually clears the

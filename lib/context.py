@@ -12,6 +12,9 @@ import sublime
 from .pathurl import path_to_uri
 
 _latest_selection = None  # last non-empty selection payload seen, any view
+_saved_layouts = {}  # window id -> saved layout dict
+_layout_backups = {}  # window id -> list of backup layouts
+_agentide_views = {}  # window id -> set of view IDs opened by AgentIDE
 
 
 def settings():
@@ -24,12 +27,214 @@ def side_group(window):
     Returns -1 (active group) if the setting is off."""
     if not settings().get("open_in_side_group", True):
         return -1
+
+    layout_settings = settings().get("layout", {})
+    use_new_window = layout_settings.get("use_new_window", False)
+
+    if use_new_window:
+        return -1  # Let caller handle new window creation
+
     if window.num_groups() == 1:
+        # Check window size constraints
+        min_size = layout_settings.get("min_window_size", 400)
+        max_size = layout_settings.get("max_window_size")
+        window_rect = window.active_view().viewport_position()
+        # Simple check - if window is too small, don't split
+        if window_rect and len(window_rect) >= 2:
+            width = window.active_view().layout_extent()[0]
+            if width < min_size:
+                return -1  # Window too small for split
+            if max_size and width > max_size:
+                return -1  # Window too large for split
+
+        # Save original layout if restore is enabled
+        if layout_settings.get("restore_on_close", True):
+            window_id = window.id()
+            if window_id not in _saved_layouts:
+                _saved_layouts[window_id] = window.get_layout()
+
+        # Apply split based on settings
+        split_position = layout_settings.get("split_position", "right")
+        split_size = layout_settings.get("split_size", 0.45)
+        split_orientation = layout_settings.get("split_orientation", "vertical")
+
+        # Adaptive layout adjustments
+        if layout_settings.get("adaptive_layouts", True):
+            # Adjust split size based on window width
+            try:
+                width = window.active_view().layout_extent()[0]
+                if width < 1200:
+                    split_size = max(0.3, split_size * 0.8)  # Smaller split on small screens
+                elif width > 2000:
+                    split_size = min(0.6, split_size * 1.2)  # Larger split on large screens
+            except Exception:
+                pass  # If we can't get width, use default
+
+        if split_orientation == "vertical":
+            if split_position == "left":
+                cols = [0.0, split_size, 1.0]
+            else:  # right
+                cols = [0.0, 1.0 - split_size, 1.0]
+            rows = [0.0, 1.0]
+            cells = [[0, 0, 1, 1], [1, 0, 2, 1]]
+        else:  # horizontal
+            cols = [0.0, 1.0]
+            if split_position == "top":
+                rows = [0.0, split_size, 1.0]
+            else:  # bottom
+                rows = [0.0, 1.0 - split_size, 1.0]
+            cells = [[0, 0, 1, 1], [0, 1, 1, 2]]
+
         window.set_layout({
-            "cols": [0.0, 0.55, 1.0], "rows": [0.0, 1.0],
-            "cells": [[0, 0, 1, 1], [1, 0, 2, 1]],
+            "cols": cols,
+            "rows": rows,
+            "cells": cells,
         })
     return window.num_groups() - 1
+
+
+def restore_layout(window):
+    """Restore the original window layout if it was saved."""
+    layout_settings = settings().get("layout", {})
+    if not layout_settings.get("restore_on_close", True):
+        return
+
+    restore_timing = layout_settings.get("restore_timing", "when_empty")
+    if restore_timing == "never":
+        return
+
+    window_id = window.id()
+    if window_id not in _saved_layouts:
+        return
+
+    original_layout = _saved_layouts[window_id]
+
+    # Check if we should preserve manual changes
+    if not layout_settings.get("preserve_manual_changes", False):
+        current_layout = window.get_layout()
+        if current_layout != original_layout:
+            # User manually changed layout, don't restore
+            return
+
+    # Validate layout before restore if enabled
+    if layout_settings.get("validate_on_restore", True):
+        if not _validate_layout(original_layout):
+            # Use fallback layout if validation fails
+            fallback = layout_settings.get("fallback_layout")
+            if fallback:
+                window.set_layout(fallback)
+            else:
+                # If no fallback, keep current layout
+                return
+
+    # Create backup before restore if enabled
+    if layout_settings.get("backup_layouts", True):
+        _backup_layout(window_id, window.get_layout())
+
+    # Apply restore delay if specified
+    delay = layout_settings.get("restore_delay", 0)
+    if delay > 0:
+        sublime.set_timeout(lambda: _apply_restore(window, original_layout, window_id), delay)
+    else:
+        _apply_restore(window, original_layout, window_id)
+
+
+def _apply_restore(window, layout, window_id):
+    """Actually apply the layout restore."""
+    try:
+        window.set_layout(layout)
+        del _saved_layouts[window_id]
+    except Exception:
+        # Error handling based on settings
+        layout_settings = settings().get("layout", {})
+        error_handling = layout_settings.get("error_handling", "warn")
+        if error_handling == "warn":
+            sublime.status_message("AgentIDE: warning - layout restore failed")
+        elif error_handling == "error":
+            sublime.error_message("AgentIDE: layout restore failed")
+
+
+def _validate_layout(layout):
+    """Validate that a layout dict is well-formed."""
+    if not isinstance(layout, dict):
+        return False
+    required_keys = {"cols", "rows", "cells"}
+    if not required_keys.issubset(layout.keys()):
+        return False
+    return True
+
+
+def _backup_layout(window_id, layout):
+    """Create a backup of the current layout."""
+    layout_settings = settings().get("layout", {})
+    max_backups = layout_settings.get("max_backup_versions", 5)
+
+    if window_id not in _layout_backups:
+        _layout_backups[window_id] = []
+
+    backups = _layout_backups[window_id]
+    backups.append(layout)
+
+    # Limit backup size
+    if len(backups) > max_backups:
+        _layout_backups[window_id] = backups[-max_backups:]
+
+
+def track_agentide_view(window, view):
+    """Track that a view was opened by AgentIDE."""
+    window_id = window.id()
+    if window_id not in _agentide_views:
+        _agentide_views[window_id] = set()
+    _agentide_views[window_id].add(view.id())
+
+
+def untrack_agentide_view(window, view):
+    """Stop tracking an AgentIDE-opened view."""
+    window_id = window.id()
+    if window_id in _agentide_views:
+        _agentide_views[window_id].discard(view.id())
+        if not _agentide_views[window_id]:
+            del _agentide_views[window_id]
+
+
+def has_agentide_views(window):
+    """Check if window has any AgentIDE-opened views."""
+    window_id = window.id()
+    return window_id in _agentide_views and bool(_agentide_views[window_id])
+
+
+def cleanup_layouts():
+    """Clean up saved layouts for windows that no longer exist."""
+    layout_settings = settings().get("layout", {})
+    if not layout_settings.get("cleanup_on_exit", True):
+        return
+
+    # Get all current window IDs
+    current_window_ids = {window.id() for window in sublime.windows()}
+
+    # Clean up saved layouts for non-existent windows
+    for window_id in list(_saved_layouts.keys()):
+        if window_id not in current_window_ids:
+            del _saved_layouts[window_id]
+
+    # Clean up backups for non-existent windows
+    for window_id in list(_layout_backups.keys()):
+        if window_id not in current_window_ids:
+            del _layout_backups[window_id]
+
+    # Clean up agentide view tracking for non-existent windows
+    for window_id in list(_agentide_views.keys()):
+        if window_id not in current_window_ids:
+            del _agentide_views[window_id]
+
+    # Layout garbage collection if enabled
+    gc_hours = layout_settings.get("layout_gc_hours", 24)
+    if gc_hours > 0:
+        import time
+        current_time = time.time()
+        gc_threshold = current_time - (gc_hours * 3600)
+        # Simple timestamp-based cleanup could be added here
+        # For now, we just clean up non-existent windows
 
 
 def all_workspace_folders():
@@ -161,10 +366,33 @@ def open_file(file_path, preview=False, start_text=None, end_text=None,
     flags = sublime.TRANSIENT if preview else 0
     group = side_group(window)
     view = window.open_file(file_path, flags, group=group)
-    if make_frontmost:
-        window.focus_view(view)
-        if hasattr(window, "bring_to_front"):
-            window.bring_to_front()
+
+    # Track this view as opened by AgentIDE
+    if not preview:
+        track_agentide_view(window, view)
+
+    # Handle focus behavior based on settings
+    layout_settings = settings().get("layout", {})
+    focus_behavior = layout_settings.get("focus_behavior", "new_content")
+
+    if focus_behavior == "new_content":
+        # Focus new content (default behavior)
+        if make_frontmost:
+            window.focus_view(view)
+            if hasattr(window, "bring_to_front"):
+                window.bring_to_front()
+    elif focus_behavior == "keep_current":
+        # Keep current focus, don't switch to new content
+        pass
+    elif focus_behavior == "alternate":
+        # Alternate between current and new
+        current_view = window.active_view()
+        if current_view != view:
+            window.focus_view(view)
+        else:
+            # Already focused, keep it
+            pass
+
     _select_when_loaded(view, start_text, end_text, select_to_eol)
     return view
 

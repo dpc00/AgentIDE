@@ -8,5 +8,7 @@
     },
     { "caption": "AgentIDE: Status", "command": "agentide_status" },
     { "caption": "AgentIDE: Restart Server", "command": "agentide_restart" },
+    { "caption": "AgentIDE: Restore Layout", "command": "agentide_restore_layout" },
+    { "caption": "AgentIDE: Cleanup Layouts", "command": "agentide_cleanup_layouts" },
     { "caption": "AgentIDE: Send Selection as @-mention", "command": "agentide_at_mention" }
 ]
