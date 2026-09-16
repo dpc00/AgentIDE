@@ -406,13 +406,13 @@ class AgentideSelectionListener(sublime_plugin.EventListener):
         if view.file_name() is not None and not view.settings().get("is_widget"):
             return  # a real file view -- on_selection_modified_async covers it
         # Focus moved to something with no file (e.g. a GhostShell terminal
-        # tab): tell the CLI there's no active selection, so it doesn't keep
-        # showing a stale file reference until the next prompt refreshes it.
-        # viewName identifies which tab this is (GhostShell names its tabs
-        # per session/profile, e.g. "Claude", "Codex") instead of collapsing
-        # every non-file view into an indistinguishable blank.
+        # tab). A null filePath may not actually clear the CLI's own display
+        # (plausible if its client code only updates on a truthy filePath) --
+        # sending a non-null placeholder instead, naming the tab, to test
+        # that theory and give the same information either way.
+        tab_label = "(no file: {})".format(view.name() or "untitled")
         payload = {
-            "text": "", "filePath": None, "fileUrl": None, "viewName": view.name() or None,
+            "text": "", "filePath": tab_label, "fileUrl": None, "viewName": view.name() or None,
             "selection": {"start": {"line": 0, "character": 0},
                           "end": {"line": 0, "character": 0}, "isEmpty": True},
         }
