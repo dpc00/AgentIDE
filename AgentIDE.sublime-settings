@@ -18,9 +18,19 @@
     // folder, falling back to "python"/"python3" on PATH.
     "python_path": null,
 
+    // How a diff review (openDiff) is shown:
+    // "side_group" (default) -- splits the window and opens a real tab,
+    //   same as before. All the split_*/restore_*/layout settings below
+    //   apply to this mode.
+    // "panel" -- shows the diff in a bottom output panel instead. Doesn't
+    //   touch the window layout at all (nothing to restore), and Escape
+    //   rejects it, same as closing a side_group tab does. Better for a
+    //   quick look; a side group is more room for a large diff.
+    "diff_display": "side_group",
+
     // Open files the CLI shows (openFile) in a right-hand side group,
     // keeping your own tabs untouched. Also used for where a diff review
-    // opens. Set false to use the active group.
+    // opens in "side_group" mode. Set false to use the active group.
     "open_in_side_group": true,
 
     // Debounce for selection_changed notifications (milliseconds).

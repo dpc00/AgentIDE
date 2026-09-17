@@ -518,6 +518,22 @@ class AgentIDEDiffCloseListener(sublime_plugin.EventListener):
         diff_view.handle_view_close(view)
 
 
+class AgentIdePanelRejectCommand(sublime_plugin.WindowCommand):
+    """Bound to Escape while an AgentIDE diff panel is focused (see
+    Default.sublime-keymap) -- panel-mode's equivalent of closing a diff
+    tab counting as Reject."""
+
+    def run(self):
+        panel = self.window.active_panel()
+        if not panel or not panel.startswith("output."):
+            return
+        panel_id = panel[len("output."):]
+        tab_name = diff_view.tab_name_for_panel(panel_id)
+        self.window.run_command("hide_panel", {"cancel": True})
+        if tab_name:
+            diff_view.reject(tab_name)
+
+
 def launch_env_line():
     """Env-prefixed launch line for a POSIX-ish shell (git-bash)."""
     if not is_running():
