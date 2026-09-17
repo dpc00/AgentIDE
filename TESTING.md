@@ -123,10 +123,24 @@ Not `diff_view.open_diff_ui()` called directly -- have the actual
 - [ ] With the panel focused, press **Escape**. Confirm this counts as
       Reject (file unchanged, CLI actually gets told, panel closes) --
       same contract as closing a side_group tab.
-- [ ] Trigger two diffs back to back in panel mode. Confirm each is
-      independently resolvable (accepting/rejecting one doesn't affect
-      the other's pending request), even though only one panel is
-      visible at a time.
+- [ ] Trigger two diffs back to back in panel mode (FIFO queue, not a
+      stack). Confirm the FIRST diff stays on screen -- the second one
+      does NOT interrupt/replace it, it just queues silently behind it.
+- [ ] Accept/Reject the one on screen (the first). Confirm it resolves
+      correctly *and* the second, still-pending diff's panel
+      automatically becomes visible next -- it must not be left
+      invisible with the CLI still waiting on it and nothing on screen.
+- [ ] Trigger three diffs back to back (A, B, C). Confirm A stays on
+      screen (B and C are queued, not shown). Resolve A -- confirm the
+      screen advances to B. Resolve B -- confirm it advances to C.
+      Resolve C -- confirm nothing is left showing. This is the case
+      that actually exercises advancing the queue; resolving out of
+      arrival order only proves a queued (not-yet-shown) diff can be
+      resolved without disturbing whatever's currently on screen -- it
+      does NOT exercise advancing to the next one, since nothing advances
+      until the diff actually on screen is the one that resolves.
+- [ ] Resolve that second one too. Confirm no panel is left showing and
+      nothing errors when there's nothing left pending.
 - [ ] Switch back to `"diff_display": "side_group"` (or leave it unset)
       mid-session and confirm the old behavior is unchanged -- this is
       an added option, not a replacement.

@@ -20,6 +20,7 @@ from . import context
 _diffs = {}         # tab_name -> record dict
 _phantom_sets = {}  # view id -> PhantomSet (must be retained or it vanishes)
 _resolver = None    # set by agent_ide: fn(client_id, request_id, payload)
+_panel_queue = []   # tab_name, in arrival order -- panel mode's FIFO of pending diffs
 
 
 def set_resolver(fn):
@@ -89,8 +90,12 @@ def _open_diff_panel(client_id, request_id, old_text, target, new_file_contents,
     """Renders the diff in a bottom output panel instead of a side group --
     doesn't touch the window layout at all (no split, nothing to restore),
     and closes on Escape like any other panel. Only one panel is visible
-    at a time, but each open diff gets its own independently addressable
-    panel so accept/reject still resolves the right pending request."""
+    at a time, so pending diffs form a strict FIFO queue (_panel_queue):
+    a diff that arrives while another is already pending is queued and
+    shown once its turn comes, in arrival order -- it never interrupts
+    whatever you're currently looking at, and nothing here is ever
+    auto-accepted or auto-rejected. Every pending diff is only ever
+    resolved by an explicit Accept/Reject/Escape."""
     window = sublime.active_window()
     panel_id = "agent_ide_diff__{}".format(_sanitize_panel_id(tab_name))
 
@@ -116,9 +121,15 @@ def _open_diff_panel(client_id, request_id, old_text, target, new_file_contents,
         "target": target,
         "resolved": False,
     }
-    window.run_command("show_panel", {"panel": "output.{}".format(panel_id)})
-    sublime.status_message(
-        "AgentIDE diff: {} — Accept/Reject above the panel, Escape rejects".format(tab_name))
+    was_empty = len(_panel_queue) == 0
+    _panel_queue.append(tab_name)
+    if was_empty:
+        window.run_command("show_panel", {"panel": "output.{}".format(panel_id)})
+        sublime.status_message(
+            "AgentIDE diff: {} — Accept/Reject above the panel, Escape rejects".format(tab_name))
+    else:
+        sublime.status_message(
+            "AgentIDE diff: {} queued ({} pending)".format(tab_name, len(_panel_queue)))
 
 
 def _sanitize_panel_id(tab_name):
@@ -132,6 +143,25 @@ def tab_name_for_panel(panel_id):
         if rec.get("mode") == "panel" and rec.get("panel_id") == panel_id and not rec["resolved"]:
             return tab_name
     return None
+
+
+def _show_next_pending_panel(window):
+    """Resolving the diff on screen must not leave the next-queued one
+    invisible -- the CLI would still be waiting on it with nothing on
+    screen to act on. Strict FIFO: whichever diff has been waiting
+    longest (front of _panel_queue) is shown next. This only ever
+    reveals a still-pending diff; it never resolves one."""
+    while _panel_queue:
+        tab_name = _panel_queue[0]
+        rec = _diffs.get(tab_name)
+        if rec is None or rec["resolved"]:
+            _panel_queue.pop(0)  # resolved out of band (e.g. closeAllDiffTabs) -- skip it
+            continue
+        window.run_command("show_panel", {"panel": "output.{}".format(rec["panel_id"])})
+        sublime.status_message(
+            "AgentIDE diff: {} — Accept/Reject above the panel ({} pending)".format(
+                tab_name, len(_panel_queue)))
+        return
 
 
 def _add_action_phantom(view, tab_name):
@@ -327,8 +357,11 @@ def _teardown(tab_name):
 
     if rec.get("mode") == "panel":
         # Panel mode never touched the window layout -- nothing to restore.
+        if tab_name in _panel_queue:
+            _panel_queue.remove(tab_name)
         if window is not None and rec.get("panel_id"):
             window.destroy_output_panel(rec["panel_id"])
+            _show_next_pending_panel(window)
         return
 
     view = _view_by_id(rec["view_id"])

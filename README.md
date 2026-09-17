@@ -1,5 +1,5 @@
 # AgentIDE
-
+<!-- multi-diff test B -->
 A standalone Sublime Text plugin that bridges Sublime to any IDE-protocol
 agent CLI that speaks the same lock-file/WebSocket protocol Claude Code
 uses — generic across agents, not tied to one vendor.

@@ -11,7 +11,7 @@
     "port": null,
 
     // Name shown in the connecting CLI's IDE picker and the lock file.
-    "ide_name": "Sublime Text",
+    "ide_name": "Sublime Text IDE",
 
     // Interpreter used by the executeCode tool's persistent Python
     // session. null auto-detects a .venv/venv under the first workspace
@@ -25,8 +25,11 @@
     // "panel" -- shows the diff in a bottom output panel instead. Doesn't
     //   touch the window layout at all (nothing to restore), and Escape
     //   rejects it, same as closing a side_group tab does. Better for a
-    //   quick look; a side group is more room for a large diff.
-    "diff_display": "side_group",
+    //   quick look; a side group is more room for a large diff. Multiple
+    //   pending diffs form a strict FIFO queue: a new one never interrupts
+    //   what's on screen, it just waits its turn in arrival order, and is
+    //   only ever resolved by an explicit accept/reject/Escape.
+    "diff_display": "panel",
 
     // Open files the CLI shows (openFile) in a right-hand side group,
     // keeping your own tabs untouched. Also used for where a diff review
