@@ -37,8 +37,6 @@ def active_count():
 
 
 def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_contents, tab_name):
-    window = sublime.active_window()
-
     old_text = ""
     if old_file_path and os.path.exists(old_file_path):
         with open(old_file_path, encoding="utf-8", errors="replace") as fh:
@@ -47,6 +45,16 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
     target = new_file_path or old_file_path
     if tab_name in _diffs:
         tab_name = "{} ({})".format(tab_name, request_id)
+
+    mode = context.settings().get("diff_display", "side_group")
+    if mode == "panel":
+        _open_diff_panel(client_id, request_id, old_text, target, new_file_contents, tab_name)
+    else:
+        _open_diff_side_group(client_id, request_id, old_text, target, new_file_contents, tab_name)
+
+
+def _open_diff_side_group(client_id, request_id, old_text, target, new_file_contents, tab_name):
+    window = sublime.active_window()
 
     group = context.side_group(window)
     if group >= 0:
@@ -64,6 +72,7 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
     _add_action_phantom(view, tab_name)
 
     _diffs[tab_name] = {
+        "mode": "side_group",
         "client_id": client_id,
         "request_id": request_id,
         "view_id": view.id(),
@@ -74,6 +83,55 @@ def open_diff_ui(client_id, request_id, old_file_path, new_file_path, new_file_c
     view.show(sublime.Region(0, 0))
     window.focus_view(view)
     sublime.status_message("AgentIDE diff: {} — Accept/Reject above the buffer".format(tab_name))
+
+
+def _open_diff_panel(client_id, request_id, old_text, target, new_file_contents, tab_name):
+    """Renders the diff in a bottom output panel instead of a side group --
+    doesn't touch the window layout at all (no split, nothing to restore),
+    and closes on Escape like any other panel. Only one panel is visible
+    at a time, but each open diff gets its own independently addressable
+    panel so accept/reject still resolves the right pending request."""
+    window = sublime.active_window()
+    panel_id = "agent_ide_diff__{}".format(_sanitize_panel_id(tab_name))
+
+    view = window.create_output_panel(panel_id, unlisted=True)
+    view.set_read_only(False)
+    view.set_name(tab_name)
+    syntax = _syntax_for(target)
+    if syntax:
+        view.assign_syntax(syntax)
+    view.run_command("append", {"characters": new_file_contents})
+    view.set_reference_document(old_text)
+    view.set_read_only(True)
+
+    _add_action_phantom(view, tab_name)
+
+    _diffs[tab_name] = {
+        "mode": "panel",
+        "client_id": client_id,
+        "request_id": request_id,
+        "view_id": view.id(),
+        "panel_id": panel_id,
+        "window_id": window.id(),
+        "target": target,
+        "resolved": False,
+    }
+    window.run_command("show_panel", {"panel": "output.{}".format(panel_id)})
+    sublime.status_message(
+        "AgentIDE diff: {} — Accept/Reject above the panel, Escape rejects".format(tab_name))
+
+
+def _sanitize_panel_id(tab_name):
+    return "".join(c if c.isalnum() else "_" for c in tab_name)
+
+
+def tab_name_for_panel(panel_id):
+    """Reverse lookup for the Escape keybinding: which pending diff owns
+    the currently-active panel."""
+    for tab_name, rec in _diffs.items():
+        if rec.get("mode") == "panel" and rec.get("panel_id") == panel_id and not rec["resolved"]:
+            return tab_name
+    return None
 
 
 def _add_action_phantom(view, tab_name):
@@ -115,7 +173,7 @@ def accept(tab_name):
     rec = _diffs.get(tab_name)
     if rec is None or rec["resolved"]:
         return False
-    view = _view_by_id(rec["view_id"])
+    view = _find_view(rec)
     if view is None:
         return reject(tab_name)
     content = view.substr(sublime.Region(0, view.size()))
@@ -264,16 +322,20 @@ def _teardown(tab_name):
     if rec is None:
         return
     _phantom_sets.pop(rec["view_id"], None)
+    window_id = rec.get("window_id")
+    window = _window_by_id(window_id) if window_id is not None else None
+
+    if rec.get("mode") == "panel":
+        # Panel mode never touched the window layout -- nothing to restore.
+        if window is not None and rec.get("panel_id"):
+            window.destroy_output_panel(rec["panel_id"])
+        return
+
     view = _view_by_id(rec["view_id"])
     if view is not None:
         view.set_scratch(True)
         view.close()
 
-    window_id = rec.get("window_id")
-    if window_id is None:
-        return
-
-    window = _window_by_id(window_id)
     if window is None:
         return
 
@@ -292,6 +354,17 @@ def _syntax_for(path):
         return sublime.find_syntax_for_file(path)
     except Exception:  # noqa: BLE001 - older builds
         return None
+
+
+def _find_view(rec):
+    """Panel views don't show up in window.views() (they're not tabs in a
+    group), so they need their own lookup path."""
+    if rec.get("mode") == "panel":
+        window = _window_by_id(rec.get("window_id"))
+        if window is None:
+            return None
+        return window.find_output_panel(rec["panel_id"])
+    return _view_by_id(rec["view_id"])
 
 
 def _view_by_id(view_id):

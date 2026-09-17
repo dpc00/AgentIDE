@@ -112,6 +112,25 @@ Not `diff_view.open_diff_ui()` called directly -- have the actual
       entry is actually gone (check via a script if needed, but trigger
       it by hand).
 
+## 4b. `diff_display: "panel"` (new -- doesn't touch layout at all)
+
+- [ ] Set `"diff_display": "panel"`. Ask the CLI to edit a file. Confirm
+      the diff appears in a bottom panel, not a new group -- window
+      layout is completely unchanged (no split).
+- [ ] Click **Accept** in the panel's phantom. File on disk has the new
+      content, panel closes.
+- [ ] Repeat, click **Reject** instead. File unchanged, panel closes.
+- [ ] With the panel focused, press **Escape**. Confirm this counts as
+      Reject (file unchanged, CLI actually gets told, panel closes) --
+      same contract as closing a side_group tab.
+- [ ] Trigger two diffs back to back in panel mode. Confirm each is
+      independently resolvable (accepting/rejecting one doesn't affect
+      the other's pending request), even though only one panel is
+      visible at a time.
+- [ ] Switch back to `"diff_display": "side_group"` (or leave it unset)
+      mid-session and confirm the old behavior is unchanged -- this is
+      an added option, not a replacement.
+
 ## 5. Multi-window
 
 - [ ] Two separate Sublime windows open, each with its own connected CLI
