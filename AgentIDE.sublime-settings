@@ -51,7 +51,7 @@
     "restore_timing": "when_empty",
 
     // Where the split goes: "right", "left", "bottom", "top".
-    "split_position": "right",
+    "split_position": "bottom",
 
     // Split size as a fraction of the window (0.1 to 0.9).
     "split_size": 0.45,

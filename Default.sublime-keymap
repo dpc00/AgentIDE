@@ -1,0 +1,11 @@
+[
+    // Escape rejects a diff shown in panel mode (see "diff_display" setting)
+    // -- mirrors closing a diff tab counting as Reject in side_group mode.
+    {
+        "keys": ["escape"],
+        "command": "agent_ide_panel_reject",
+        "context": [
+            { "key": "panel", "operand": "output.agent_ide_diff" }
+        ]
+    }
+]
