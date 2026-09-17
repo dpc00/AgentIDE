@@ -3,7 +3,7 @@
 
 Third slice: registers the selection/context tools (openFile,
 getCurrentSelection, getLatestSelection, getOpenEditors,
-getWorkspaceFolders, checkDocumentDirty, saveDocument, executeCode-stub)
+getWorkspaceFolders, checkDocumentDirty, saveDocument, executeCode)
 and pushes selection_changed/at_mentioned notifications.
 """
 
@@ -15,7 +15,7 @@ import threading
 import sublime
 import sublime_plugin
 
-from .lib import context, diff_view, lockfile
+from .lib import context, diff_view, execute, lockfile
 from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
@@ -45,6 +45,7 @@ _state = {
 }
 
 _pending = PendingRequests()
+_execute = {"session": None}
 
 
 def settings():
@@ -157,6 +158,9 @@ def stop():
     if port is not None:
         lockfile.remove_lock(port)
     _state.update({"server": None, "mcp": None, "token": None, "port": None, "connected": False})
+    if _execute["session"] is not None:
+        _execute["session"].restart()  # kills the subprocess
+        _execute["session"] = None
     log("stopped")
 
 
@@ -281,9 +285,71 @@ def _register_tools(mcp):
         lambda args, ctx: run_on_main(lambda: context.save_document(args.get("filePath", ""))))
 
     mcp.register_tool(
-        "executeCode", "Execute code in a Jupyter kernel", obj,
-        lambda args, ctx: (_ for _ in ()).throw(
-            ToolError("executeCode is not supported in Sublime Text")))
+        "executeCode",
+        "Execute Python code in a persistent interpreter for the current "
+        "project. State (variables, imports) persists across calls until "
+        "the session is restarted. Requires the user to approve each "
+        "execution.",
+        {"type": "object", "properties": {
+            "code": {"type": "string", "description": "The code to be executed."},
+        }, "required": ["code"]},
+        _tool_execute_code)
+
+
+def _tool_execute_code(args, ctx):
+    code = args.get("code")
+    if not code:
+        raise ToolError("no code provided")
+
+    request_id = ctx["id"]
+    client_id = ctx.get("client_id")
+    _pending.add(client_id, request_id, {"kind": "executeCode"})
+    log("executeCode deferred: client=#{} id={} ({} chars)".format(client_id, request_id, len(code)))
+
+    def ui():
+        window = sublime.active_window()
+        window.show_quick_panel(
+            [["Execute", "Run this code in the AgentIDE Python session"],
+             ["Cancel", "Do not execute the code"]],
+            lambda idx: _on_execute_choice(idx, client_id, request_id, code),
+            placeholder="AgentIDE: Claude wants to execute code")
+
+    sublime.set_timeout(ui, 0)
+    return DEFERRED
+
+
+def _on_execute_choice(index, client_id, request_id, code):
+    if index != 0:
+        _resolve_and_send(
+            client_id, request_id,
+            "Code execution cancelled by user. Ask the user how they would like to proceed.")
+        return
+
+    def run():
+        try:
+            reply = _execute_session().execute(code)
+        except (TimeoutError, OSError) as exc:
+            _resolve_and_send(client_id, request_id, "Error: {}".format(exc))
+            return
+        parts = []
+        if reply.get("stdout"):
+            parts.append(reply["stdout"])
+        if reply.get("stderr"):
+            parts.append("stderr: {}".format(reply["stderr"]))
+        if not reply.get("ok"):
+            parts.append("Error:\n{}".format(reply.get("error")))
+        _resolve_and_send(client_id, request_id, "\n".join(parts) if parts else "(no output)")
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def _execute_session():
+    if _execute["session"] is None:
+        folders = context.all_workspace_folders()
+        python_path = settings().get("python_path") or execute.discover_python(folders)
+        cwd = folders[0] if folders else None
+        _execute["session"] = execute.ExecuteSession(python_path, cwd=cwd, logger=log)
+    return _execute["session"]
 
 
 def _tool_open_file(args, ctx):
