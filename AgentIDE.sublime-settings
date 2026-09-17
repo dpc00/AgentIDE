@@ -13,6 +13,11 @@
     // Name shown in the connecting CLI's IDE picker and the lock file.
     "ide_name": "Sublime Text",
 
+    // Interpreter used by the executeCode tool's persistent Python
+    // session. null auto-detects a .venv/venv under the first workspace
+    // folder, falling back to "python"/"python3" on PATH.
+    "python_path": null,
+
     // Open files the CLI shows (openFile) in a right-hand side group,
     // keeping your own tabs untouched. Also used for where a diff review
     // opens. Set false to use the active group.
