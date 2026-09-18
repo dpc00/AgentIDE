@@ -3,7 +3,8 @@
         "caption": "Preferences: AgentIDE Settings",
         "command": "edit_settings",
         "args": {
-            "base_file": "${packages}/AgentIDE/AgentIDE.sublime-settings"
+            "base_file": "${packages}/AgentIDE/AgentIDE.sublime-settings",
+            "default": "{}"
         }
     },
     { "caption": "AgentIDE: Status", "command": "agent_ide_status" },
