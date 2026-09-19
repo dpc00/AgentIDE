@@ -1,3 +1,4 @@
 __pycache__/
 *.pyc
 agentide_test.txt
+*.whl
