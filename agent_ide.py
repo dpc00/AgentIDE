@@ -53,7 +53,7 @@ def settings():
 
 
 def log(msg):
-    if settings().get("debug", True):
+    if settings().get("debug", False):
         print("[AgentIDE] {}".format(msg))
 
 
