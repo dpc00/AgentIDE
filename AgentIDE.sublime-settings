@@ -23,12 +23,13 @@
     //   same as before. All the split_*/restore_*/layout settings below
     //   apply to this mode.
     // "panel" -- shows the diff in a bottom output panel instead. Doesn't
-    //   touch the window layout at all (nothing to restore), and Escape
-    //   rejects it, same as closing a side_group tab does. Better for a
+    //   touch the window layout at all (nothing to restore). Escape just closes
+    //   the panel like any other panel; the diff stays pending until you
+    //   press Accept or Reject. Better for a
     //   quick look; a side group is more room for a large diff. Multiple
     //   pending diffs form a strict FIFO queue: a new one never interrupts
     //   what's on screen, it just waits its turn in arrival order, and is
-    //   only ever resolved by an explicit accept/reject/Escape.
+    //   only ever resolved by an explicit accept/reject.
     "diff_display": "panel",
 
     // Open files the CLI shows (openFile) in a right-hand side group,
