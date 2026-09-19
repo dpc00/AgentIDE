@@ -136,6 +136,15 @@ def _sanitize_panel_id(tab_name):
     return "".join(c if c.isalnum() else "_" for c in tab_name)
 
 
+def tab_name_for_panel(panel_id):
+    """Reverse lookup for agent_ide_panel_reject: which pending diff owns
+    the currently-active panel."""
+    for tab_name, rec in _diffs.items():
+        if rec.get("mode") == "panel" and rec.get("panel_id") == panel_id and not rec["resolved"]:
+            return tab_name
+    return None
+
+
 def _show_next_pending_panel(window):
     """Resolving the diff on screen must not leave the next-queued one
     invisible -- the CLI would still be waiting on it with nothing on
