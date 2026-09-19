@@ -120,9 +120,9 @@ Not `diff_view.open_diff_ui()` called directly -- have the actual
 - [ ] Click **Accept** in the panel's phantom. File on disk has the new
       content, panel closes.
 - [ ] Repeat, click **Reject** instead. File unchanged, panel closes.
-- [ ] With the panel focused, press **Escape**. Confirm this counts as
-      Reject (file unchanged, CLI actually gets told, panel closes) --
-      same contract as closing a side_group tab.
+- [ ] With the panel focused, press **Escape**. Confirm it only closes
+      the panel, like any other panel: the diff stays pending (CLI not
+      told anything) until Accept or Reject is chosen.
 - [ ] Trigger two diffs back to back in panel mode (FIFO queue, not a
       stack). Confirm the FIRST diff stays on screen -- the second one
       does NOT interrupt/replace it, it just queues silently behind it.

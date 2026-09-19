@@ -89,13 +89,13 @@ def _open_diff_side_group(client_id, request_id, old_text, target, new_file_cont
 def _open_diff_panel(client_id, request_id, old_text, target, new_file_contents, tab_name):
     """Renders the diff in a bottom output panel instead of a side group --
     doesn't touch the window layout at all (no split, nothing to restore),
-    and closes on Escape like any other panel. Only one panel is visible
+    and closes on Escape like any other panel (a pending diff stays pending). Only one panel is visible
     at a time, so pending diffs form a strict FIFO queue (_panel_queue):
     a diff that arrives while another is already pending is queued and
     shown once its turn comes, in arrival order -- it never interrupts
     whatever you're currently looking at, and nothing here is ever
     auto-accepted or auto-rejected. Every pending diff is only ever
-    resolved by an explicit Accept/Reject/Escape."""
+    resolved by an explicit Accept/Reject."""
     window = sublime.active_window()
     panel_id = "agent_ide_diff__{}".format(_sanitize_panel_id(tab_name))
 
@@ -126,7 +126,7 @@ def _open_diff_panel(client_id, request_id, old_text, target, new_file_contents,
     if was_empty:
         window.run_command("show_panel", {"panel": "output.{}".format(panel_id)})
         sublime.status_message(
-            "AgentIDE diff: {} — Accept/Reject above the panel, Escape rejects".format(tab_name))
+            "AgentIDE diff: {} — Accept/Reject above the panel".format(tab_name))
     else:
         sublime.status_message(
             "AgentIDE diff: {} queued ({} pending)".format(tab_name, len(_panel_queue)))
@@ -134,15 +134,6 @@ def _open_diff_panel(client_id, request_id, old_text, target, new_file_contents,
 
 def _sanitize_panel_id(tab_name):
     return "".join(c if c.isalnum() else "_" for c in tab_name)
-
-
-def tab_name_for_panel(panel_id):
-    """Reverse lookup for the Escape keybinding: which pending diff owns
-    the currently-active panel."""
-    for tab_name, rec in _diffs.items():
-        if rec.get("mode") == "panel" and rec.get("panel_id") == panel_id and not rec["resolved"]:
-            return tab_name
-    return None
 
 
 def _show_next_pending_panel(window):
