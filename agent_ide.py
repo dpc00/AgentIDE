@@ -518,18 +518,54 @@ class AgentIDEDiffCloseListener(sublime_plugin.EventListener):
         diff_view.handle_view_close(view)
 
 
-class AgentIdePanelRejectCommand(sublime_plugin.WindowCommand):
-    """Command-form of the diff panel's Reject button (same result as
-    clicking it), for the diff panel that is currently active. Not bound
-    to any key: Escape only closes the panel."""
+def _panel_diff_tab_name(window, tab_name):
+    """The diff a panel command acts on: the tab_name it was given (the
+    panel's buttons pass one), else the diff owning the active panel."""
+    if tab_name:
+        return tab_name
+    panel = window.active_panel()
+    if not panel or not panel.startswith("output."):
+        return None
+    return diff_view.tab_name_for_panel(panel[len("output."):])
+
+
+class AgentIdeShowPendingDiffCommand(sublime_plugin.WindowCommand):
+    """Reopen the diff panel after Escape closed it. The diff stays
+    pending until Accept or Reject, so this is how you get back to it.
+    (The panels are unlisted, so Sublime's panel switchers don't show them.)"""
+
+    def is_enabled(self):
+        return diff_view.has_pending_panel()
 
     def run(self):
-        panel = self.window.active_panel()
-        if not panel or not panel.startswith("output."):
-            return
-        panel_id = panel[len("output."):]
-        tab_name = diff_view.tab_name_for_panel(panel_id)
-        self.window.run_command("hide_panel", {"cancel": True})
+        diff_view.show_pending(self.window)
+
+
+class AgentIdePanelAcceptCommand(sublime_plugin.WindowCommand):
+    """The diff panel's Accept action: write the new content and answer
+    the CLI. Used by the panel's Accept button; runnable from the Command
+    Palette or a key binding. Escape does not run it -- Escape only closes
+    the panel."""
+
+    def is_enabled(self, tab_name=None):
+        return _panel_diff_tab_name(self.window, tab_name) is not None
+
+    def run(self, tab_name=None):
+        tab_name = _panel_diff_tab_name(self.window, tab_name)
+        if tab_name:
+            diff_view.accept(tab_name)
+
+
+class AgentIdePanelRejectCommand(sublime_plugin.WindowCommand):
+    """The diff panel's Reject action. Used by the panel's Reject button;
+    runnable from the Command Palette or a key binding. Escape does not
+    run it -- Escape only closes the panel."""
+
+    def is_enabled(self, tab_name=None):
+        return _panel_diff_tab_name(self.window, tab_name) is not None
+
+    def run(self, tab_name=None):
+        tab_name = _panel_diff_tab_name(self.window, tab_name)
         if tab_name:
             diff_view.reject(tab_name)
 

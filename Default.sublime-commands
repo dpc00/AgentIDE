@@ -11,5 +11,8 @@
     { "caption": "AgentIDE: Restart Server", "command": "agent_ide_restart" },
     { "caption": "AgentIDE: Restore Layout", "command": "agent_ide_restore_layout" },
     { "caption": "AgentIDE: Cleanup Layouts", "command": "agent_ide_cleanup_layouts" },
-    { "caption": "AgentIDE: Send Selection as @-mention", "command": "agent_ide_at_mention" }
+    { "caption": "AgentIDE: Send Selection as @-mention", "command": "agent_ide_at_mention" },
+    { "caption": "AgentIDE: Show Pending Diff", "command": "agent_ide_show_pending_diff" },
+    { "caption": "AgentIDE: Accept Diff", "command": "agent_ide_panel_accept" },
+    { "caption": "AgentIDE: Reject Diff", "command": "agent_ide_panel_reject" }
 ]

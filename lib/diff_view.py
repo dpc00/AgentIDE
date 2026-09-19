@@ -137,12 +137,26 @@ def _sanitize_panel_id(tab_name):
 
 
 def tab_name_for_panel(panel_id):
-    """Reverse lookup for agent_ide_panel_reject: which pending diff owns
-    the currently-active panel."""
+    """Reverse lookup for the agent_ide_panel_* commands: which pending diff
+    owns the given panel."""
     for tab_name, rec in _diffs.items():
         if rec.get("mode") == "panel" and rec.get("panel_id") == panel_id and not rec["resolved"]:
             return tab_name
     return None
+
+
+def has_pending_panel():
+    return any(
+        (rec := _diffs.get(t)) is not None and not rec["resolved"] for t in _panel_queue)
+
+
+def show_pending(window):
+    """Reopen the diff panel (e.g. after Escape closed it) for the diff
+    that has been waiting longest. Returns False when none is pending."""
+    if not has_pending_panel():
+        return False
+    _show_next_pending_panel(window)
+    return True
 
 
 def _show_next_pending_panel(window):
@@ -190,10 +204,10 @@ def _add_action_phantom(view, tab_name):
 
 
 def _on_action(href, tab_name):
-    if href == "accept":
-        accept(tab_name)
-    elif href == "reject":
-        reject(tab_name)
+    """Panel buttons go through the same commands as the palette/keys."""
+    if href in ("accept", "reject"):
+        sublime.active_window().run_command(
+            "agent_ide_panel_" + href, {"tab_name": tab_name})
 
 
 # ---------- outcomes ----------
