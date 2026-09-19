@@ -44,7 +44,8 @@ When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
 
 ## Settings (`AgentIDE.sublime-settings`)
 
-- `debug` — print protocol traffic to the Sublime console.
+- `debug` — print protocol traffic to the Sublime console (default `false`;
+  when true it floods the console with every JSON-RPC frame).
 - `auto_start` — start the server when Sublime starts.
 - `port` — fixed port (falls back to random if busy), so a machine-wide
   `CLAUDE_CODE_SSE_PORT` env var can point at one stable port.

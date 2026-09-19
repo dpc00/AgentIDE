@@ -1,6 +1,8 @@
 {
     // Print connection/handshake traffic to the Sublime console.
-    "debug": true,
+    // Off by default: when true, every JSON-RPC frame and selection_changed
+    // notification is printed, which floods View > Show Console.
+    "debug": false,
 
     // Start the server when Sublime starts.
     "auto_start": true,
