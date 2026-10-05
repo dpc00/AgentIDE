@@ -1,0 +1,3 @@
+# Memory index (AgentIDE notes)
+
+- [AgentIDE diff layout panes](project_agentide_diff_layout_panes_later.md) — Donald wants set_layout panes for AgentIDE diff instead of output…
