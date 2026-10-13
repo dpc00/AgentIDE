@@ -23,6 +23,16 @@ _resolver = None    # set by agent_ide: fn(client_id, request_id, payload)
 _panel_queue = []   # tab_name, in arrival order -- panel mode's FIFO of pending diffs
 
 
+def _gs_hook(kind, view=None, **info):
+    """Report to GhostShell's view tracer (setting debug_view_trace) if loaded."""
+    h = getattr(sublime, "_gs_trace_hook", None)
+    if h is not None:
+        try:
+            h(kind, view, **info)
+        except Exception:
+            pass
+
+
 def set_resolver(fn):
     global _resolver
     _resolver = fn
@@ -59,6 +69,7 @@ def _open_diff_side_group(client_id, request_id, old_text, target, new_file_cont
 
     group = context.side_group(window)
     if group >= 0:
+        _gs_hook("agentide_focus_group_diff", None, group=group)
         window.focus_group(group)
     view = window.new_file()
     view.set_scratch(True)
@@ -81,6 +92,7 @@ def _open_diff_side_group(client_id, request_id, old_text, target, new_file_cont
         "target": target,
         "resolved": False,
     }
+    _gs_hook("agentide_diff_show_focus", view)
     view.show(sublime.Region(0, 0))
     window.focus_view(view)
     sublime.status_message("AgentIDE diff: {} — Accept/Reject above the buffer".format(tab_name))
@@ -353,6 +365,7 @@ def _apply_and_save(view, content, on_done, on_error, close_after, refocus):
     if refocus is not None:
         window = refocus.window()
         if window is not None:
+            _gs_hook("agentide_diff_refocus", refocus)
             window.focus_view(refocus)
     on_done()
 

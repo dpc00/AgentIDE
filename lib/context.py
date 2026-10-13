@@ -18,6 +18,16 @@ _layout_backups = {}  # window id -> list of {"layout": dict, "saved_at": float}
 _agentIDE_views = {}  # window id -> set of view IDs opened by AgentIDE
 
 
+def _gs_hook(kind, view=None, **info):
+    """Report to GhostShell's view tracer (setting debug_view_trace) if loaded."""
+    h = getattr(sublime, "_gs_trace_hook", None)
+    if h is not None:
+        try:
+            h(kind, view, **info)
+        except Exception:
+            pass
+
+
 def settings():
     return sublime.load_settings("AgentIDE.sublime-settings")
 
@@ -374,10 +384,12 @@ def open_file(file_path, preview=False, start_text=None, end_text=None,
     focus_behavior = settings().get("focus_behavior", "new_content")
 
     if focus_behavior == "new_content" and make_frontmost:
+        _gs_hook("agentide_focus_view_new_content", view)
         window.focus_view(view)
         if hasattr(window, "bring_to_front"):
             window.bring_to_front()
     elif focus_behavior == "alternate" and window.active_view() != view:
+        _gs_hook("agentide_focus_view_alternate", view)
         window.focus_view(view)
     # "keep_current" (or "alternate" when the new view is already active): no-op
 
@@ -406,6 +418,7 @@ def _select_when_loaded(view, start_text, end_text, to_eol, tries=100):
         if to_eol:
             end_point = view.line(end_point).b
         selection = sublime.Region(start_region.a, end_point)
+        _gs_hook("agentide_select_and_show", view)
         view.sel().clear()
         view.sel().add(selection)
         view.show_at_center(selection)
