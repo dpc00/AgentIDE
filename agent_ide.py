@@ -15,7 +15,7 @@ import threading
 import sublime
 import sublime_plugin
 
-from .lib import context, diff_view, execute, lockfile
+from .lib import context, diagnostics, diff_view, execute, lockfile
 from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
@@ -238,10 +238,7 @@ def _register_tools(mcp):
     mcp.register_tool(
         "getDiagnostics", "Get language diagnostics for a file",
         {"type": "object", "properties": {"uri": {"type": "string"}}},
-        # Always empty for now -- Sublime has no error/warning source wired
-        # in yet. Returns {"content": []}, the correct "no diagnostics"
-        # shape, instead of erroring like before.
-        lambda args, ctx: {"content": []})
+        _tool_get_diagnostics)
 
     mcp.register_tool(
         "openFile", "Open a file in the editor and optionally select text",
@@ -350,6 +347,19 @@ def _execute_session():
         cwd = folders[0] if folders else None
         _execute["session"] = execute.ExecuteSession(python_path, cwd=cwd, logger=log)
     return _execute["session"]
+
+
+def _tool_get_diagnostics(args, ctx):
+    """Errors and warnings from the LSP package (Sublime has no diagnostics of its own): for the file in
+    args["uri"], or for every file that has any. Without LSP loaded the answer is the empty
+    {"content": []}, the proven "no diagnostics" shape."""
+    if not diagnostics.lsp_loaded():
+        return {"content": []}
+    try:
+        found = diagnostics.get_diagnostics(args.get("uri") or None)
+    except queue.Empty:
+        raise ToolError("LSP did not answer in time")
+    return {"content": [{"type": "text", "text": json.dumps(found, ensure_ascii=False)}]}
 
 
 def _tool_open_file(args, ctx):

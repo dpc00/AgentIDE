@@ -34,8 +34,10 @@ When an agent CLI connects (via `/ide` or `CLAUDE_CODE_SSE_PORT` auto-connect):
   Reject.
 - **Context tools** — `openFile`, `getCurrentSelection`, `getLatestSelection`,
   `getOpenEditors`, `getWorkspaceFolders`, `checkDocumentDirty`,
-  `saveDocument`, `getDiagnostics` (always empty for now — no linter/LSP
-  source wired in yet).
+  `saveDocument`, `getDiagnostics` (the errors and warnings the LSP package's
+  language servers have published, for the file in `uri` or for every file that
+  has any; empty when the LSP package is not installed, because Sublime has no
+  diagnostics of its own).
 - **Selection sharing** — debounced `selection_changed` notifications and an
   `AgentIDE: Send Selection as @-mention` command.
 - `executeCode` is registered but explicitly unsupported (matches the
