@@ -20,6 +20,13 @@ import sys
 import threading
 import time
 
+# The child's real fd 2 is a pipe with nobody waiting on it unless a thread
+# drains it: once ~64 KB of unread bytes pile up, whatever writes to fd 2 (a
+# subprocess, a C library) blocks until the request times out and is killed.
+# Drain continuously and keep only a bounded tail for the exit message.
+_STDERR_TAIL_BYTES = 8192
+_STDERR_CHUNK_BYTES = 65536
+
 _BOOTSTRAP = r"""
 import sys, io, json, contextlib, traceback
 
@@ -61,6 +68,8 @@ class ExecuteSession:
         self._log = logger or (lambda msg: None)
         self._proc = None
         self._reader_thread = None
+        self._stderr_thread = None
+        self._stderr_tail = None
         self._replies = queue.Queue()
         self._next_id = 0
         self._lock = threading.Lock()
@@ -81,6 +90,44 @@ class ExecuteSession:
         )
         self._reader_thread = threading.Thread(target=self._read_loop, daemon=True)
         self._reader_thread.start()
+        self._stderr_tail = {"data": bytearray()}
+        self._stderr_thread = threading.Thread(
+            target=self._drain_stderr,
+            args=(self._proc, self._stderr_tail),
+            daemon=True,
+        )
+        self._stderr_thread.start()
+
+    def _drain_stderr(self, proc, tail):
+        """Read the child's fd 2 as soon as bytes arrive (os.read on the raw
+        fd, not TextIOWrapper.read, which would wait to fill its request) and
+        keep only the last _STDERR_TAIL_BYTES so the buffer can never fill."""
+        try:
+            fd = proc.stderr.fileno()
+        except (AttributeError, OSError, ValueError):
+            return
+        data = tail["data"]
+        try:
+            while True:
+                chunk = os.read(fd, _STDERR_CHUNK_BYTES)
+                if not chunk:
+                    return
+                data += chunk
+                overflow = len(data) - _STDERR_TAIL_BYTES
+                if overflow > 0:
+                    del data[:overflow]
+        except (OSError, ValueError):
+            return  # the pipe was closed under us by a restart/kill
+
+    def _stderr_snapshot(self):
+        """The drained tail of the current process's stderr, as text."""
+        thread = self._stderr_thread
+        if thread is not None and thread.is_alive():
+            thread.join(timeout=0.5)  # process already exited: EOF is imminent
+        tail = self._stderr_tail
+        if not tail:
+            return ""
+        return bytes(tail["data"]).decode("utf-8", "replace")
 
     def _read_loop(self):
         proc = self._proc
@@ -130,7 +177,7 @@ class ExecuteSession:
                     reply = self._replies.get(timeout=min(remaining, 0.5))
                 except queue.Empty:
                     if self._proc.poll() is not None:
-                        stderr = self._proc.stderr.read() if self._proc.stderr else ""
+                        stderr = self._stderr_snapshot()
                         self._kill()
                         raise OSError("interpreter process exited: {}".format(stderr.strip()))
                     continue
