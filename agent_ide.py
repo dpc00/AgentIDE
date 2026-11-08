@@ -640,6 +640,19 @@ def plugin_loaded():
         log("picker hook not installed: {!r}".format(exc))
 
 
+def _panel_label(item):
+    """The row's visible text: a plain string, a [first, second] pair, or an ST4 QuickPanelItem."""
+    if isinstance(item, str):
+        return item[:120]
+    for attr in ("trigger", "name", "text"):
+        value = getattr(item, attr, None)
+        if isinstance(value, str) and value:
+            return value[:120]
+    if isinstance(item, (list, tuple)) and item:
+        return str(item[0])[:120]
+    return str(item)[:120]
+
+
 def _install_picker_hook():
     """Report quick panels and input panels, which Sublime has no event for.
 
@@ -668,9 +681,7 @@ def _install_picker_hook():
 
     def show_quick_panel(self, items, on_select=None, *args, **kwargs):
         entries = list(items) if items is not None else []
-        preview = []
-        for item in entries[:5]:
-            preview.append(item[0] if isinstance(item, (list, tuple)) and item else str(item))
+        preview = [_panel_label(item) for item in entries[:5]]
         _report("picker_changed", {"state": "open", "kind": "quick_panel",
                                    "items": len(entries), "preview": preview})
 
