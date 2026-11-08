@@ -634,6 +634,71 @@ def plugin_loaded():
     if settings().get("auto_start", True):
         start()
     _start_dialog_watch()
+    try:
+        _install_picker_hook()
+    except Exception as exc:  # never keep the plugin from loading over a notification hook
+        log("picker hook not installed: {!r}".format(exc))
+
+
+def _install_picker_hook():
+    """Report quick panels and input panels, which Sublime has no event for.
+
+    Both are opened through `sublime.Window`, so wrapping those two methods is the only way to see
+    them. The wrappers always call through and return what the original returned: a notification is
+    never worth changing behaviour for. `state: closed` is sent from the wrapped callback, which is
+    the moment the panel is gone; a panel dismissed without a selection sends nothing (Sublime's own
+    dismiss path does not call the callback), which is why `state: open` is what an agent should key on.
+    """
+    if _state.get("picker_hook"):
+        return
+    window_cls = sublime.Window
+
+    original_quick = window_cls.show_quick_panel
+    original_input = window_cls.show_input_panel
+
+    def _report(method, payload):
+        if not settings().get("notify_pickers", True):
+            return
+        if not is_running() or not _state["connected"]:
+            return
+        try:
+            _notify(method, payload)
+        except Exception as exc:  # a notification must never break a panel
+            log("picker notification failed: {!r}".format(exc))
+
+    def show_quick_panel(self, items, on_select=None, *args, **kwargs):
+        entries = list(items) if items is not None else []
+        preview = []
+        for item in entries[:5]:
+            preview.append(item[0] if isinstance(item, (list, tuple)) and item else str(item))
+        _report("picker_changed", {"state": "open", "kind": "quick_panel",
+                                   "items": len(entries), "preview": preview})
+
+        if on_select is not None:
+            def wrapped(index, *a, **kw):
+                _report("picker_changed", {"state": "closed", "kind": "quick_panel", "picked": index})
+                return on_select(index, *a, **kw)
+        else:
+            wrapped = None
+        return original_quick(self, items, wrapped, *args, **kwargs)
+
+    def show_input_panel(self, caption, initial_text, on_done, on_change, on_cancel):
+        _report("input_panel_changed", {"state": "open", "caption": caption,
+                                        "initial": initial_text})
+
+        def done(text):
+            _report("input_panel_changed", {"state": "closed", "caption": caption, "submitted": True})
+            return on_done(text) if on_done else None
+
+        def cancelled():
+            _report("input_panel_changed", {"state": "closed", "caption": caption, "submitted": False})
+            return on_cancel() if on_cancel else None
+
+        return original_input(self, caption, initial_text, done, on_change, cancelled)
+
+    window_cls.show_quick_panel = show_quick_panel
+    window_cls.show_input_panel = show_input_panel
+    _state["picker_hook"] = True
 
 
 def _start_dialog_watch():
