@@ -172,3 +172,7 @@ never by routing the change through its own live `/ide` connection.
 ```
 New-Item -ItemType Junction -Path "$env:APPDATA\Sublime Text\Packages\AgentIDE" -Target "C:\Users\donal\projects\AgentIDE"
 ```
+
+## contrib/
+
+`contrib/ide-bridge/` — an MCP stdio bridge for agents that are not Claude Code: it proxies this package's tools and forwards its notifications (`selection_changed`, `at_mentioned`, `dialog_changed`), and runs a desktop scanner that reports dialogs from any application. See its README.
