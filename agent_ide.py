@@ -11,6 +11,7 @@ import json
 import os
 import queue
 import threading
+import time
 
 import sublime
 import sublime_plugin
@@ -425,13 +426,30 @@ def _tool_close_tab(args, ctx):
     return "TAB_CLOSED"
 
 
+_last_notification = {"key": None, "at": 0.0}
+
+
 def _notify(method, params):
     """Broadcast a notification (no id, no response expected) to every
-    connected session."""
+    connected session.
+
+    The same method with the same payload twice within a moment is a duplicate, not information: two
+    wrappers of the same Sublime method (a plugin reload before the hooks restored themselves, seen
+    2026-11-08) both report one panel. Dropping the repeat keeps one panel = one line, and a genuine
+    repeat a second later still goes out."""
     server = _state["server"]
     if server is None:
         log("_notify({}) dropped: server not running".format(method))
         return
+    # The key is the notification's shape, not its prose: two wrappers of one panel disagree about
+    # the preview text (names vs QuickPanelItem reprs) but agree on what was opened.
+    stable = {k: params.get(k) for k in ("state", "kind", "items", "caption") if isinstance(params, dict)}
+    key = method + "\x00" + json.dumps(stable, sort_keys=True, ensure_ascii=False)
+    now = time.time()
+    if key == _last_notification["key"] and now - _last_notification["at"] < 1.0:
+        return
+    _last_notification["key"] = key
+    _last_notification["at"] = now
     msg = json.dumps({"jsonrpc": "2.0", "method": method, "params": params}, ensure_ascii=False)
     sent = server.broadcast(msg)
     log("_notify({}) -> {} client(s): {}".format(method, sent, msg[:300]))
