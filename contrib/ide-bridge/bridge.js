@@ -39,6 +39,16 @@ function lockCandidates() {
 }
 
 function findLiveLock() {
+  // An explicit lock file wins: two editors can be running (a test rig beside the person's own), and
+  // the highest-pid heuristic must not decide which one this bridge is attached to.
+  const forced = process.env.AGENTIDE_LOCK_FILE;
+  if (forced) {
+    try {
+      const info = JSON.parse(readFileSync(forced, "utf8"));
+      const port = Number(forced.split(/[\\/]/).pop().replace(/\.lock$/, ""));
+      return { port, path: forced, info };
+    } catch { return null; }
+  }
   for (const c of lockCandidates()) {
     if (!c.info?.authToken) continue;
     try { process.kill(c.info.pid, 0); return c; } catch { /* owner gone */ }
