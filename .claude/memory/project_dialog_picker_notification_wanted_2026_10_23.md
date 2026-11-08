@@ -39,3 +39,19 @@ the editor half: the information exists, on time, with the buttons named.
 **Still not built:** pickers. AgentIDE sends nothing when a quick panel opens; sublime-mcp reads one
 with `get_quick_panel`, and Sublime itself has no event for it (a package-opened panel could be hooked
 at `Window.show_quick_panel`).
+
+## 2026-11-08: the client half
+
+omp (and any MCP agent that is not Claude Code) could never consume these notifications: it speaks
+MCP over stdio/HTTP/SSE, while this package speaks the IDE protocol over a WebSocket advertised in
+`~/.claude/ide/<port>.lock`. Measured, not assumed.
+
+`C:/Users/donal/tools/agentide-bridge/bridge.js` closes that gap: a stdio MCP server that reads the
+lock, authenticates, proxies the 12 tools, and forwards `selection_changed` / `at_mentioned` /
+`dialog_changed` verbatim. It also runs `tools/dialog-watch/scan.py`, a desktop-wide scanner (every
+window, foreground, idle time, dialogs from any process — not just Sublime) and republishes its lines
+as `situation_changed`.
+
+That answers the note's open question by side-stepping it: it does not matter whether a CLI "acts on an
+unknown notification" if the notifications arrive as MCP frames on a connection the CLI already
+consumes. Registered as `agentide` in `sublime-mcp/.omp/mcp.json`.
