@@ -666,8 +666,16 @@ def _install_picker_hook():
         return
     window_cls = sublime.Window
 
-    original_quick = window_cls.show_quick_panel
-    original_input = window_cls.show_input_panel
+    # Keep the real originals on the class, once: a plugin reload re-executes this module, and
+    # wrapping whatever is currently on the class stacked a second notification on top of the first
+    # (seen live 2026-11-08: one panel produced two picker_changed lines, one with QuickPanelItem
+    # reprs from the previous version). If a previous version's wrapper is already installed there is
+    # no safe way to unwrap it from here — a full editor restart clears it.
+    if not hasattr(window_cls, "_agentide_original_show_quick_panel"):
+        window_cls._agentide_original_show_quick_panel = window_cls.show_quick_panel
+        window_cls._agentide_original_show_input_panel = window_cls.show_input_panel
+    original_quick = window_cls._agentide_original_show_quick_panel
+    original_input = window_cls._agentide_original_show_input_panel
 
     def _report(method, payload):
         if not settings().get("notify_pickers", True):
@@ -707,6 +715,8 @@ def _install_picker_hook():
 
         return original_input(self, caption, initial_text, done, on_change, cancelled)
 
+    show_quick_panel._agentide_hook = True
+    show_input_panel._agentide_hook = True
     window_cls.show_quick_panel = show_quick_panel
     window_cls.show_input_panel = show_input_panel
     _state["picker_hook"] = True
@@ -724,7 +734,23 @@ def _start_dialog_watch():
         log("dialog watch not started: {!r}".format(exc))
 
 
+def _remove_picker_hook():
+    """Restore the class methods this module wrapped, so a reload does not stack another layer."""
+    window_cls = sublime.Window
+    if getattr(window_cls.show_quick_panel, "_agentide_hook", False) and hasattr(
+            window_cls, "_agentide_original_show_quick_panel"):
+        window_cls.show_quick_panel = window_cls._agentide_original_show_quick_panel
+    if getattr(window_cls.show_input_panel, "_agentide_hook", False) and hasattr(
+            window_cls, "_agentide_original_show_input_panel"):
+        window_cls.show_input_panel = window_cls._agentide_original_show_input_panel
+    _state["picker_hook"] = False
+
+
 def plugin_unloaded():
+    try:
+        _remove_picker_hook()
+    except Exception as exc:
+        log("picker hook not removed: {!r}".format(exc))
     watcher = _state.get("dialogwatch")
     if watcher is not None:
         try:
