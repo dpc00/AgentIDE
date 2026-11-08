@@ -15,7 +15,7 @@ import threading
 import sublime
 import sublime_plugin
 
-from .lib import context, diagnostics, diff_view, execute, lockfile
+from .lib import context, diagnostics, dialogwatch, diff_view, execute, lockfile
 from .lib.mcp import DEFERRED, MCPServer, ToolError, tool_text_response
 from .lib.session import PendingRequests
 from .lib.wsserver import WSServer
@@ -437,6 +437,17 @@ def _notify(method, params):
     log("_notify({}) -> {} client(s): {}".format(method, sent, msg[:300]))
 
 
+
+def _on_dialog_event(payload):
+    """A dialog opened or closed in this editor: tell the agent, do not touch the dialog.
+
+    The agent gets a line it can act on ("Dialog is up: 'Open'. It says: ... 3 buttons: ...") while the
+    dialog is still up, so it stops guessing and stops sitting out timeouts. Answering is its call
+    (dismiss_native_window, or asking Donald); nothing here clicks anything."""
+    if not is_running() or not _state["connected"]:
+        return
+    _notify("dialog_changed", payload)
+
 def _no_file_payload(view):
     # Confirmed live 2026-09-15: a null filePath never actually cleared the
     # CLI's own display even though AgentIDE sent it correctly -- its
@@ -622,8 +633,28 @@ class AgentIdeCleanupLayoutsCommand(sublime_plugin.WindowCommand):
 def plugin_loaded():
     if settings().get("auto_start", True):
         start()
+    _start_dialog_watch()
+
+
+def _start_dialog_watch():
+    """Watch this editor's process tree for native dialogs (Windows only; inert elsewhere)."""
+    if _state.get("dialogwatch") is not None:
+        return
+    try:
+        watcher = dialogwatch.DialogWatcher(dialogwatch.root_of(os.getpid()), _on_dialog_event)
+        watcher.start()
+        _state["dialogwatch"] = watcher
+    except Exception as exc:  # never keep the plugin from loading over a watcher
+        log("dialog watch not started: {!r}".format(exc))
 
 
 def plugin_unloaded():
+    watcher = _state.get("dialogwatch")
+    if watcher is not None:
+        try:
+            watcher.stop()
+        except Exception:
+            pass
+        _state["dialogwatch"] = None
     context.cleanup_layouts()
     stop()
