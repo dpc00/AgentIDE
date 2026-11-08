@@ -21,7 +21,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const AUTH_HEADER = "x-claude-code-ide-authorization";
-const LOCK_DIR = join(homedir(), ".claude", "ide");
+const LOCK_DIR = process.env.AGENTIDE_LOCK_DIR || join(homedir(), ".claude", "ide");
 const LOG = (...a) => { if (process.env.AGENTIDE_BRIDGE_DEBUG) console.error("[bridge]", ...a); };
 
 function lockCandidates() {
