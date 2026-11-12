@@ -1,5 +1,10 @@
 # AgentIDE
 <!-- multi-diff test B -->
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue)](https://www.paypal.me/DChitester)
+
+Donate via PayPal: https://www.paypal.me/DChitester
+Contact: donaldchitester@gmail.com
+
 A standalone Sublime Text plugin that bridges Sublime to any IDE-protocol
 agent CLI that speaks the same lock-file/WebSocket protocol Claude Code
 uses — generic across agents, not tied to one vendor.
